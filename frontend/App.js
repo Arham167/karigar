@@ -1,8 +1,10 @@
 import React from "react";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import AuthScreen from "./screens/AuthScreen";
+import SignupScreen from "./screens/SignupScreen";
 import RoleSelectionScreen from "./screens/RoleSelectionScreen";
 import ProfileSetupScreen from "./screens/ProfileSetupScreen";
 import MapScreen from "./screens/MapScreen";
@@ -12,14 +14,17 @@ const Stack = createNativeStackNavigator();
 
 export default function App() {
   return (
-    <NavigationContainer>
-      <Stack.Navigator initialRouteName="Auth">
-        <Stack.Screen name="Auth" component={AuthScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="RoleSelection" component={RoleSelectionScreen} options={{ title: 'Select Your Role' }} />
-        <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} options={{ title: 'Setup Profile' }} />
-        <Stack.Screen name="Map" component={MapScreen} options={{ title: 'Find Services' }} />
-        <Stack.Screen name="SellerDashboard" component={SellerDashboard} options={{ title: 'Seller Dashboard' }} />
-      </Stack.Navigator>
-    </NavigationContainer>
+    <SafeAreaProvider>
+      <NavigationContainer>
+        <Stack.Navigator initialRouteName="Auth">
+          <Stack.Screen name="Auth" component={AuthScreen} options={{ headerShown: false }} />
+          <Stack.Screen name="Signup" component={SignupScreen} options={{ headerShown: false }} />
+          <Stack.Screen name="RoleSelection" component={RoleSelectionScreen} options={{ headerShown: false }} />
+          <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} options={{ title: 'Setup Profile' }} />
+          <Stack.Screen name="Map" component={MapScreen} options={{ title: 'Find Services' }} />
+          <Stack.Screen name="SellerDashboard" component={SellerDashboard} options={{ title: 'Seller Dashboard' }} />
+        </Stack.Navigator>
+      </NavigationContainer>
+    </SafeAreaProvider>
   );
 }

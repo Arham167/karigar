@@ -11,7 +11,7 @@ import {
   StatusBar,
   Platform,
 } from "react-native";
-import Svg, { Path, Rect, Circle, G } from "react-native-svg";
+import Svg, { Path, Rect, Circle } from "react-native-svg";
 import {
   useFonts,
   DMSans_400Regular,
@@ -50,7 +50,7 @@ const IconArrowRight = ({ color = "white", size = 18 }) => (
   </Svg>
 );
 
-export default function AuthScreen({ navigation }) {
+export default function SignupScreen({ navigation }) {
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -76,7 +76,7 @@ export default function AuthScreen({ navigation }) {
     return `${raw.slice(0, 3)} ${raw.slice(3, 7)} ${raw.slice(7)}`;
   };
 
-  const handleContinue = async () => {
+  const handleSignup = async () => {
     if (phone.length < 10) {
       setError("Please enter a valid 10-digit mobile number.");
       return;
@@ -94,11 +94,19 @@ export default function AuthScreen({ navigation }) {
 
       if (fetchError && fetchError.code !== "PGRST116") throw fetchError;
 
-      if (!existingUser) {
-        setError("No account found with this number. Please sign up.");
+      if (existingUser) {
+        setError("This phone number is already registered. Please login instead.");
         setLoading(false);
         return;
       }
+
+      const { data: newUser, error: insertError } = await supabase
+        .from("profiles")
+        .insert([{ phone_number: fullPhone }])
+        .select()
+        .single();
+
+      if (insertError) throw insertError;
       navigation.navigate("RoleSelection");
     } catch (err) {
       setError("Database error: " + err.message);
@@ -128,12 +136,12 @@ export default function AuthScreen({ navigation }) {
             <IconLogo />
           </View>
           <Text style={styles.brandName}>Karigar</Text>
-          <Text style={styles.brandTagline}>Dignity in Work, Reliability in Service</Text>
+          <Text style={styles.brandTagline}>Join our community of skilled professionals</Text>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Login</Text>
-          <Text style={styles.cardSubtitle}>Enter your mobile number to access your account</Text>
+          <Text style={styles.cardTitle}>Create Account</Text>
+          <Text style={styles.cardSubtitle}>Register with your mobile number to get started</Text>
           <Text style={styles.fieldLabel}>Mobile Number</Text>
           <View style={[styles.phoneWrapper, focused && styles.phoneWrapperFocused]}>
             <View style={styles.prefix}>
@@ -161,7 +169,7 @@ export default function AuthScreen({ navigation }) {
 
           <TouchableOpacity
             style={[styles.btnOTP, loading && styles.btnLoading]}
-            onPress={handleContinue}
+            onPress={handleSignup}
             activeOpacity={0.85}
             disabled={loading}
           >
@@ -169,16 +177,16 @@ export default function AuthScreen({ navigation }) {
               <ActivityIndicator color="#fff" size="small" />
             ) : (
               <View style={styles.btnInner}>
-                <Text style={styles.btnText}>Login</Text>
+                <Text style={styles.btnText}>Register Now</Text>
                 <IconArrowRight />
               </View>
             )}
           </TouchableOpacity>
 
           <View style={styles.signupRow}>
-            <Text style={styles.signupText}>New to Karigar? </Text>
-            <TouchableOpacity onPress={() => navigation.navigate("Signup")}>
-              <Text style={styles.signupLink}>Sign up</Text>
+            <Text style={styles.signupText}>Already have an account? </Text>
+            <TouchableOpacity onPress={() => navigation.navigate("Auth")}>
+              <Text style={styles.signupLink}>Login</Text>
             </TouchableOpacity>
           </View>
         </View>
