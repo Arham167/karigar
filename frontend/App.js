@@ -7,6 +7,8 @@ import AuthScreen from "./screens/AuthScreen";
 import SignupScreen from "./screens/SignupScreen";
 import RoleSelectionScreen from "./screens/RoleSelectionScreen";
 import ProfileSetupScreen from "./screens/ProfileSetupScreen";
+import SellerProfileSetupScreen from "./screens/SellerProfileSetupScreen";
+import VerifyOTPScreen from "./screens/VerifyOTPScreen";
 import MapScreen from "./screens/MapScreen";
 import SellerDashboard from "./screens/SellerDashboard";
 
@@ -19,8 +21,10 @@ export default function App() {
         <Stack.Navigator initialRouteName="Auth">
           <Stack.Screen name="Auth" component={AuthScreen} options={{ headerShown: false }} />
           <Stack.Screen name="Signup" component={SignupScreen} options={{ headerShown: false }} />
+          <Stack.Screen name="VerifyOTP" component={VerifyOTPScreen} options={{ headerShown: false }} />
           <Stack.Screen name="RoleSelection" component={RoleSelectionScreen} options={{ headerShown: false }} />
-          <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} options={{ title: 'Setup Profile' }} />
+          <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} options={{ headerShown: false }} />
+          <Stack.Screen name="SellerProfileSetup" component={SellerProfileSetupScreen} options={{ headerShown: false }} />
           <Stack.Screen name="Map" component={MapScreen} options={{ title: 'Find Services' }} />
           <Stack.Screen name="SellerDashboard" component={SellerDashboard} options={{ title: 'Seller Dashboard' }} />
         </Stack.Navigator>

@@ -20,6 +20,7 @@ import {
 } from "@expo-google-fonts/dm-sans";
 import { DMSerifDisplay_400Regular } from "@expo-google-fonts/dm-serif-display";
 import { supabase } from "../utils/supabase";
+import { useAuthStore } from "../store/authStore";
 
 // --- SVG Icons ---
 const IconLogo = ({ color = "white", size = 32 }) => (
@@ -86,30 +87,21 @@ export default function SignupScreen({ navigation }) {
 
     try {
       const fullPhone = `+92${phone}`;
-      let { data: existingUser, error: fetchError } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("phone_number", fullPhone)
-        .single();
+      
+      // Trigger Supabase OTP (will use the test numbers you added)
+      const { data, error: otpError } = await supabase.auth.signInWithOtp({
+        phone: fullPhone,
+      });
 
-      if (fetchError && fetchError.code !== "PGRST116") throw fetchError;
-
-      if (existingUser) {
-        setError("This phone number is already registered. Please login instead.");
-        setLoading(false);
-        return;
-      }
-
-      const { data: newUser, error: insertError } = await supabase
-        .from("profiles")
-        .insert([{ phone_number: fullPhone }])
-        .select()
-        .single();
-
-      if (insertError) throw insertError;
-      navigation.navigate("RoleSelection");
+      if (otpError) throw otpError;
+      
+      // Save phone number to store for subsequent profile setup
+      useAuthStore.getState().setPhoneNumber(fullPhone);
+      
+      // Move to Verification Screen
+      navigation.navigate("VerifyOTP", { phoneNumber: fullPhone });
     } catch (err) {
-      setError("Database error: " + err.message);
+      setError("Auth error: " + err.message);
     } finally {
       setLoading(false);
     }

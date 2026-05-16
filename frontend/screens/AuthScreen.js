@@ -20,6 +20,7 @@ import {
 } from "@expo-google-fonts/dm-sans";
 import { DMSerifDisplay_400Regular } from "@expo-google-fonts/dm-serif-display";
 import { supabase } from "../utils/supabase";
+import { useAuthStore } from "../store/authStore";
 
 // --- SVG Icons ---
 const IconLogo = ({ color = "white", size = 32 }) => (
@@ -86,22 +87,20 @@ export default function AuthScreen({ navigation }) {
 
     try {
       const fullPhone = `+92${phone}`;
-      let { data: existingUser, error: fetchError } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("phone_number", fullPhone)
-        .single();
+      
+      // Trigger Supabase OTP
+      const { data, error: otpError } = await supabase.auth.signInWithOtp({
+        phone: fullPhone,
+      });
 
-      if (fetchError && fetchError.code !== "PGRST116") throw fetchError;
+      if (otpError) throw otpError;
 
-      if (!existingUser) {
-        setError("No account found with this number. Please sign up.");
-        setLoading(false);
-        return;
-      }
-      navigation.navigate("RoleSelection");
+      // Save phone number to store
+      useAuthStore.getState().setPhoneNumber(fullPhone);
+
+      navigation.navigate("VerifyOTP", { phoneNumber: fullPhone });
     } catch (err) {
-      setError("Database error: " + err.message);
+      setError("Auth error: " + err.message);
     } finally {
       setLoading(false);
     }

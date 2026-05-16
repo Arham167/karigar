@@ -163,7 +163,13 @@ export default function RoleSelectionScreen({ navigation }) {
         {/* Continue Button */}
         <TouchableOpacity
           activeOpacity={0.8}
-          onPress={() => navigation.navigate("ProfileSetup", { role: selectedRole })}
+          onPress={() => {
+            if (selectedRole === "seller") {
+              navigation.navigate("SellerProfileSetup");
+            } else {
+              navigation.navigate("ProfileSetup", { role: "buyer" });
+            }
+          }}
           style={styles.continueButton}
         >
           <Text style={styles.continueText}>Continue</Text>
