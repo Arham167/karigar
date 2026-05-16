@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Environment Variables
+.env
+**/.env
+.env.local
+.env.*.local
+
+# Expo
+.expo/
+**/dist/
+**/web-build/
+expo-env.d.ts
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Native files
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+.kotlin/
+
+# IDE files
+.vscode/
+.idea/
