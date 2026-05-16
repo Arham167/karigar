@@ -45,18 +45,38 @@ export default function VerifyOTPScreen({ navigation, route }) {
 
       if (verifyError) throw verifyError;
 
-      // Atomic cleanup: Ensure the profile row exists even if it was deleted manually
-      await supabase.from('profiles').upsert({
-        id: data.user.id,
-        phone_number: phoneNumber
-      });
+      // Check if profile exists and is complete
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', data.user.id)
+        .single();
 
       // Save phone to store for Profile Setup
       useAuthStore.getState().setPhoneNumber(phoneNumber);
-      
-      // Move to Role Selection
-      navigation.navigate("RoleSelection");
+
+      if (profile && profile.role && profile.name) {
+        // Setup already complete, go to dashboard
+        console.log("Profile complete, redirecting to dashboard:", profile.role);
+        navigation.reset({
+          index: 0,
+          routes: [{ name: profile.role === "buyer" ? "Map" : "SellerDashboard" }],
+        });
+      } else {
+        // Profile doesn't exist or is incomplete
+        if (!profile) {
+          // Atomic cleanup: Ensure the profile row exists
+          await supabase.from('profiles').upsert({
+            id: data.user.id,
+            phone_number: phoneNumber
+          });
+        }
+        
+        console.log("Profile incomplete, moving to Role Selection");
+        navigation.navigate("RoleSelection");
+      }
     } catch (err) {
+      console.error("Verification error:", err);
       setError("Invalid code. Please use the code you set in Supabase (e.g. 123456).");
     } finally {
       setLoading(false);

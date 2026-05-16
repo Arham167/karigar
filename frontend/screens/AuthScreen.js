@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   StyleSheet,
   View,
@@ -57,6 +57,37 @@ export default function AuthScreen({ navigation }) {
   const [error, setError] = useState("");
   const [focused, setFocused] = useState(false);
   const phoneInputRef = useRef(null);
+
+  useEffect(() => {
+    checkSession();
+  }, []);
+
+  const checkSession = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        setLoading(true);
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+
+        if (profile && profile.role && profile.name) {
+          console.log("Existing session found, redirecting to dashboard:", profile.role);
+          navigation.reset({
+            index: 0,
+            routes: [{ name: profile.role === "buyer" ? "Map" : "SellerDashboard" }],
+          });
+        } else {
+          setLoading(false);
+        }
+      }
+    } catch (err) {
+      console.error("Session check error:", err);
+      setLoading(false);
+    }
+  };
 
   let [fontsLoaded] = useFonts({
     DMSans_400Regular,
