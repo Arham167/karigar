@@ -1,6 +1,8 @@
 const express = require("express");
 const router = express.Router();
+const matchingController = require("../controllers/matchingController");
 
-// TODO: Add providers routes
+// POST /api/providers/match
+router.post("/match", matchingController.matchProviders);
 
 module.exports = router;

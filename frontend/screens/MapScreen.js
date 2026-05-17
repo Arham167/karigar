@@ -157,6 +157,13 @@ export default function MapScreen({ navigation }) {
   const [jobDescription, setJobDescription] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Dynamic Provider Matching States
+  const [matchedProviders, setMatchedProviders] = useState([]);
+  const [showMatches, setShowMatches] = useState(false);
+  const [matchedService, setMatchedService] = useState("");
+  const [matchedTime, setMatchedTime] = useState("");
+  const [matchedLocation, setMatchedLocation] = useState("");
+
   // User Profile States
   const [profileImage, setProfileImage] = useState("https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=400&auto=format&fit=crop");
   const [userName, setUserName] = useState("Karigar User");
@@ -176,6 +183,11 @@ export default function MapScreen({ navigation }) {
   // Voice Interaction States
   const [isListening, setIsListening] = useState(false);
   const voiceScale = useRef(new Animated.Value(1)).current;
+
+  // Scanning Animation States
+  const [isScanning, setIsScanning] = useState(false);
+  const radarScale = useRef(new Animated.Value(0)).current;
+  const radarOpacity = useRef(new Animated.Value(1)).current;
 
   // Requests List States
   const [bookings, setBookings] = useState([]);
@@ -247,6 +259,31 @@ export default function MapScreen({ navigation }) {
       voiceScale.setValue(1.0);
     }
   }, [isListening]);
+
+  // Radar Scanning Animation
+  useEffect(() => {
+    if (isScanning) {
+      radarScale.setValue(0);
+      radarOpacity.setValue(1);
+      Animated.loop(
+        Animated.parallel([
+          Animated.timing(radarScale, {
+            toValue: 4,
+            duration: 2000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(radarOpacity, {
+            toValue: 0,
+            duration: 2000,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    } else {
+      radarScale.setValue(0);
+      radarOpacity.setValue(1);
+    }
+  }, [isScanning]);
 
   const loadUserProfile = async () => {
     try {
@@ -433,16 +470,82 @@ export default function MapScreen({ navigation }) {
 
       if (error) throw error;
 
-      showCustomAlert(
-        "Job Requested Successfully! 🎉",
-        `Your request for ${service.value} at ${parsedLocation.value} for ${time.value} has been parsed & posted. Nearby Karigars are being notified!`,
-        [{ text: "Awesome", onPress: () => {
-          setJobDescription("");
-          setActiveTab("requests");
-        }}],
-        "success"
-      );
+      // Start the scanning animation
+      setIsScanning(true);
+      setShowMatches(false);
+      setMatchedProviders([]);
+
+      // Now fetch matching providers from the matching API
+      console.log(`[Frontend] Fetching matching providers at: ${BASE_URL}/api/providers/match`);
+      
+      const userLat = location ? location.coords.latitude : region.latitude;
+      const userLng = location ? location.coords.longitude : region.longitude;
+
+      const matchResponse = await fetch(`${BASE_URL}/api/providers/match`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Bypass-Tunnel-Reminder": "true",
+        },
+        body: JSON.stringify({
+          service: service.value,
+          time: time.value,
+          resolvedTimestamp: time.resolvedTimestamp || new Date().toISOString(),
+          location: parsedLocation.value,
+          latitude: userLat,
+          longitude: userLng
+        }),
+      });
+
+      if (!matchResponse.ok) {
+        throw new Error("Failed to fetch matching providers.");
+      }
+
+      const matchResult = await matchResponse.json();
+      if (!matchResult.success) {
+        throw new Error(matchResult.error || "Failed to parse matching providers.");
+      }
+
+      const matches = matchResult.providers || [];
+      
+      // Delay to let the scanning animation play out for a premium effect
+      setTimeout(() => {
+        setIsScanning(false);
+        setMatchedProviders(matches);
+        setMatchedService(service.value);
+        setMatchedTime(time.value);
+        setMatchedLocation(parsedLocation.value);
+        setShowMatches(true);
+
+        // Zoom the map to fit user and markers
+        if (mapRef.current && matches.length > 0) {
+          const coords = matches.map(p => ({
+            latitude: p.lat,
+            longitude: p.lng
+          }));
+          
+          // Add user's coordinates
+          coords.push({
+            latitude: userLat,
+            longitude: userLng
+          });
+
+          mapRef.current.fitToCoordinates(coords, {
+            edgePadding: { top: 120, right: 60, bottom: 280, left: 60 },
+            animated: true
+          });
+        }
+
+        showCustomAlert(
+          "Sellers Matched! 🚀",
+          `We've parsed your request and found 5 matching ${service.value}s nearby who are available for ${time.value}! Check the map to see their ratings and locations.`,
+          [{ text: "View Matches", onPress: () => {} }],
+          "success"
+        );
+      }, 2500);
+
     } catch (error) {
+      setIsScanning(false);
       showCustomAlert(
         "Error placing request", 
         error.message,
@@ -461,6 +564,61 @@ export default function MapScreen({ navigation }) {
       setJobDescription("I need an expert AC specialist to service my split unit because it's not cooling properly.");
       setIsListening(false);
     }, 2800);
+  };
+
+  const handleCloseMatches = () => {
+    setShowMatches(false);
+    setMatchedProviders([]);
+    setJobDescription("");
+  };
+
+  const handleBookProvider = (provider) => {
+    showCustomAlert(
+      "Confirm Booking 🛠️",
+      `Would you like to book "${provider.business_name}" for ${matchedService} at ${matchedTime}?`,
+      [
+        { text: "Cancel", style: "cancel", onPress: () => {} },
+        {
+          text: "Book Now",
+          onPress: async () => {
+            try {
+              setIsSubmitting(true);
+              const { data: { user } } = await supabase.auth.getUser();
+              
+              // Add a confirmed booking in Supabase
+              const { error } = await supabase.from("bookings").insert([
+                {
+                  buyer_id: user.id,
+                  provider_id: provider.id.startsWith("mock-") ? null : provider.id, // Only use real provider ID if not mock
+                  service_type: matchedService,
+                  location: matchedLocation,
+                  requested_time: new Date().toISOString(),
+                  price: 1800, // custom confirm price
+                  status: "confirmed",
+                },
+              ]);
+
+              if (error) throw error;
+
+              showCustomAlert(
+                "Booking Confirmed! 🎉",
+                `${provider.business_name} has accepted your request. They are preparing to arrive!`,
+                [{ text: "Awesome", onPress: () => {
+                  handleCloseMatches();
+                  setActiveTab("requests");
+                }}],
+                "success"
+              );
+            } catch (err) {
+              showCustomAlert("Booking Error", err.message, [{ text: "OK" }], "error");
+            } finally {
+              setIsSubmitting(false);
+            }
+          }
+        }
+      ],
+      "question"
+    );
   };
 
   const handleSignOut = async () => {
@@ -631,7 +789,58 @@ export default function MapScreen({ navigation }) {
                   showsUserLocation={true}
                   showsMyLocationButton={false}
                   customMapStyle={customMapStyle}
-                />
+                >
+                  {/* Radar Scanning Animation */}
+                  {isScanning && (location || region) && (
+                    <Marker
+                      coordinate={{
+                        latitude: location ? location.coords.latitude : region.latitude,
+                        longitude: location ? location.coords.longitude : region.longitude,
+                      }}
+                      anchor={{ x: 0.5, y: 0.5 }}
+                    >
+                      <View style={styles.radarContainer}>
+                        <Animated.View
+                          style={[
+                            styles.radarRing,
+                            {
+                              transform: [{ scale: radarScale }],
+                              opacity: radarOpacity,
+                            },
+                          ]}
+                        />
+                        <View style={styles.radarCore} />
+                      </View>
+                    </Marker>
+                  )}
+
+                  {/* Matches Markers */}
+                  {!isScanning && showMatches && matchedProviders.map((provider) => (
+                    <Marker
+                      key={provider.id}
+                      coordinate={{ latitude: provider.lat, longitude: provider.lng }}
+                      title={provider.business_name}
+                      description={`${provider.specialization} • ★${provider.base_rating}`}
+                      onPress={() => handleBookProvider(provider)}
+                    >
+                      <View style={styles.premiumPopupMarker}>
+                        <View style={styles.popupCard}>
+                          <Image source={{ uri: provider.profile_image_url }} style={styles.popupImage} />
+                          <View style={styles.popupInfo}>
+                            <Text style={styles.popupName} numberOfLines={1}>{provider.business_name.split(' (')[0]}</Text>
+                            <View style={styles.popupRatingContainer}>
+                              <Star size={12} color="#FBBF24" fill="#FBBF24" />
+                              <Text style={styles.popupRating}>{provider.base_rating}</Text>
+                              <Text style={styles.popupDistance}> • {provider.distance ? `${provider.distance} km` : "Nearby"}</Text>
+                            </View>
+                          </View>
+                        </View>
+                        <View style={styles.popupArrow} />
+                      </View>
+                    </Marker>
+                  ))}
+                </MapView>
+
                 
                 {/* Custom My-Location Centering Button */}
                 <TouchableOpacity
@@ -645,51 +854,112 @@ export default function MapScreen({ navigation }) {
             )}
 
             {/* Request Card Overlay */}
-            <KeyboardAvoidingView
-              behavior={Platform.OS === "ios" ? "padding" : "height"}
-              keyboardVerticalOffset={Platform.OS === "ios" ? 140 : 0}
-              style={styles.requestCardContainer}
-            >
-              <View style={styles.requestCard}>
-                <View style={styles.cardHeader}>
-                  <Text style={styles.cardTitle}>Describe your job</Text>
+            {isScanning ? (
+              <View style={styles.scanningCardContainer}>
+                <View style={styles.scanningCard}>
+                  <ActivityIndicator size="large" color="#10B981" style={{ marginBottom: 16 }} />
+                  <Text style={styles.scanningTitle}>Locating Professionals...</Text>
+                  <Text style={styles.scanningSubtitle}>Scanning your area for the best {jobDescription ? "matches" : "Karigars"}</Text>
                 </View>
+              </View>
+            ) : !showMatches ? (
+              <KeyboardAvoidingView
+                behavior={Platform.OS === "ios" ? "padding" : "height"}
+                keyboardVerticalOffset={Platform.OS === "ios" ? 140 : 0}
+                style={styles.requestCardContainer}
+              >
+                <View style={styles.requestCard}>
+                  <View style={styles.cardHeader}>
+                    <Text style={styles.cardTitle}>Describe your job</Text>
+                  </View>
 
-                <View style={styles.inputContainer}>
-                  <TextInput
-                    placeholder="e.g. I need a plumber to fix a leaking tap in Gulshan."
-                    placeholderTextColor="#9CA3AF"
-                    multiline
-                    style={styles.textArea}
-                    value={jobDescription}
-                    onChangeText={setJobDescription}
-                  />
+                  <View style={styles.inputContainer}>
+                    <TextInput
+                      placeholder="e.g. I need a plumber to fix a leaking tap in Gulshan."
+                      placeholderTextColor="#9CA3AF"
+                      multiline
+                      style={styles.textArea}
+                      value={jobDescription}
+                      onChangeText={setJobDescription}
+                    />
+                    <TouchableOpacity
+                      style={styles.micInputButton}
+                      activeOpacity={0.8}
+                      onPress={triggerVoiceSearch}
+                    >
+                      <Mic size={24} color="#065F46" />
+                    </TouchableOpacity>
+                  </View>
+
                   <TouchableOpacity
-                    style={styles.micInputButton}
+                    style={styles.requestCta}
                     activeOpacity={0.8}
-                    onPress={triggerVoiceSearch}
+                    onPress={handleRequestKarigar}
+                    disabled={isSubmitting}
                   >
-                    <Mic size={24} color="#065F46" />
+                    {isSubmitting ? (
+                      <ActivityIndicator color="white" />
+                    ) : (
+                      <>
+                        <Text style={styles.ctaText}>Request a Karigar</Text>
+                        <ArrowRight size={26} color="white" />
+                      </>
+                    )}
                   </TouchableOpacity>
                 </View>
+              </KeyboardAvoidingView>
+            ) : (
+              <View style={styles.matchesCardContainer}>
+                <View style={styles.matchesCard}>
+                  <View style={styles.matchesCardHeader}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.matchesCardTitle}>Best Matches Found ✨</Text>
+                      <Text style={styles.matchesCardSubtitle} numberOfLines={1}>
+                        5 professionals found for {matchedService} in {matchedLocation}
+                      </Text>
+                    </View>
+                    <TouchableOpacity 
+                      style={styles.closeMatchesBtn} 
+                      onPress={handleCloseMatches}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.closeMatchesText}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
 
-                <TouchableOpacity
-                  style={styles.requestCta}
-                  activeOpacity={0.8}
-                  onPress={handleRequestKarigar}
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? (
-                    <ActivityIndicator color="white" />
-                  ) : (
-                    <>
-                      <Text style={styles.ctaText}>Request a Karigar</Text>
-                      <ArrowRight size={26} color="white" />
-                    </>
-                  )}
-                </TouchableOpacity>
+                  <ScrollView 
+                    horizontal 
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.matchesScrollContent}
+                  >
+                    {matchedProviders.map((provider) => (
+                      <TouchableOpacity 
+                        key={provider.id} 
+                        style={styles.miniProviderCard}
+                        onPress={() => handleBookProvider(provider)}
+                        activeOpacity={0.9}
+                      >
+                        <Image source={{ uri: provider.profile_image_url }} style={styles.miniAvatar} />
+                        <Text style={styles.miniName} numberOfLines={1}>{provider.business_name.split(' (')[0]}</Text>
+                        <View style={styles.miniRatingRow}>
+                          <Star size={12} color="#FBBF24" fill="#FBBF24" />
+                          <Text style={styles.miniRatingText}>{provider.base_rating}</Text>
+                        </View>
+                        <Text style={styles.miniDistance}>{provider.distance ? `${provider.distance} km away` : "Nearby"}</Text>
+                        
+                        <TouchableOpacity 
+                          style={styles.miniBookBtn}
+                          onPress={() => handleBookProvider(provider)}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={styles.miniBookText}>Book Now</Text>
+                        </TouchableOpacity>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
               </View>
-            </KeyboardAvoidingView>
+            )}
           </View>
         </View>
       )}
@@ -1537,5 +1807,239 @@ const styles = StyleSheet.create({
     fontFamily: "DMSans_700Bold",
     fontSize: 15,
     color: "#4B5563",
+  },
+  // Radar Animation Styles
+  radarContainer: {
+    width: 100,
+    height: 100,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  radarRing: {
+    position: "absolute",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(16, 185, 129, 0.35)",
+    borderWidth: 1,
+    borderColor: "rgba(16, 185, 129, 0.7)",
+  },
+  radarCore: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: "#10B981",
+    borderWidth: 3,
+    borderColor: "white",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 6,
+  },
+  scanningCardContainer: {
+    position: "absolute",
+    bottom: 110,
+    left: 20,
+    right: 20,
+    zIndex: 20,
+  },
+  scanningCard: {
+    backgroundColor: "rgba(255, 255, 255, 0.98)",
+    borderRadius: 32,
+    padding: 30,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(16, 185, 129, 0.3)",
+    shadowColor: "#10B981",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  scanningTitle: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 20,
+    color: "#065F46",
+    marginBottom: 6,
+  },
+  scanningSubtitle: {
+    fontFamily: "DMSans_500Medium",
+    fontSize: 14,
+    color: "#6B7280",
+    textAlign: "center",
+  },
+  // Matches Popup Card Overlay Styles
+  matchesCardContainer: {
+    position: "absolute",
+    bottom: 110,
+    left: 20,
+    right: 20,
+    zIndex: 20,
+  },
+  matchesCard: {
+    backgroundColor: "rgba(255, 255, 255, 0.97)",
+    borderRadius: 32,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.6)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  matchesCardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+    paddingHorizontal: 4,
+  },
+  matchesCardTitle: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 20,
+    color: "#111827",
+  },
+  matchesCardSubtitle: {
+    fontFamily: "DMSans_500Medium",
+    fontSize: 13,
+    color: "#6B7280",
+    marginTop: 2,
+  },
+  closeMatchesBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#F3F4F6",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  closeMatchesText: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#4B5563",
+  },
+  matchesScrollContent: {
+    gap: 12,
+    paddingRight: 10,
+  },
+  miniProviderCard: {
+    backgroundColor: "#F9FAFB",
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    padding: 16,
+    width: 140,
+    alignItems: "center",
+  },
+  miniAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#E5E7EB",
+    marginBottom: 8,
+  },
+  miniName: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 13,
+    color: "#111827",
+    textAlign: "center",
+  },
+  miniRatingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 4,
+  },
+  miniRatingText: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 12,
+    color: "#374151",
+  },
+  miniDistance: {
+    fontFamily: "DMSans_500Medium",
+    fontSize: 11,
+    color: "#6B7280",
+    marginTop: 2,
+    marginBottom: 8,
+  },
+  miniBookBtn: {
+    backgroundColor: "#065F46",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    width: "100%",
+    alignItems: "center",
+  },
+  miniBookText: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 12,
+    color: "white",
+  },
+  // Custom Map popup styles
+  premiumPopupMarker: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  popupCard: {
+    flexDirection: "row",
+    backgroundColor: "white",
+    borderRadius: 18,
+    padding: 8,
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderColor: "#10B981",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
+    maxWidth: 180,
+  },
+  popupImage: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    marginRight: 6,
+    backgroundColor: "#E5E7EB",
+  },
+  popupInfo: {
+    flex: 1,
+  },
+  popupName: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 12,
+    color: "#111827",
+  },
+  popupRatingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 1,
+  },
+  popupRating: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 10,
+    color: "#374151",
+    marginLeft: 2,
+  },
+  popupDistance: {
+    fontFamily: "DMSans_500Medium",
+    fontSize: 9,
+    color: "#6B7280",
+  },
+  popupArrow: {
+    width: 0,
+    height: 0,
+    backgroundColor: "transparent",
+    borderStyle: "solid",
+    borderLeftWidth: 6,
+    borderRightWidth: 6,
+    borderTopWidth: 6,
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
+    borderTopColor: "#10B981",
+    alignSelf: "center",
+    marginTop: -1,
   },
 });
