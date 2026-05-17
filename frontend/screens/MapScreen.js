@@ -622,22 +622,40 @@ export default function MapScreen({ navigation }) {
         return;
       }
 
-      // Check if a pending booking already exists for this buyer and provider
-      const providerId = provider.id && provider.id.startsWith("mock-") ? null : provider.id;
+      const isMock = !provider.id || provider.id.startsWith("mock-");
       
+      if (isMock) {
+        // Navigate directly to KarigarChat screen with mock booking details (fully simulated offline)
+        navigation.navigate("KarigarChat", {
+          bookingId: `mock-booking-id-${provider.id}`,
+          booking: {
+            id: `mock-booking-id-${provider.id}`,
+            price: provider.dynamicPrice || 1200,
+            service_type: provider.specialization || "Expert Services",
+            location: provider.location || "Karachi"
+          },
+          provider: provider,
+          role: "buyer",
+          dynamicQuote: provider.dynamicPrice || 1200,
+          buyerName: userName || "Arham N."
+        });
+        return;
+      }
+
+      // Real provider: Check if a pending booking already exists for this buyer and provider
+      const providerId = provider.id;
       let booking = null;
-      if (providerId) {
-        const { data, error } = await supabase
-          .from("bookings")
-          .select("*")
-          .eq("buyer_id", user.id)
-          .eq("seller_id", providerId)
-          .eq("status", "pending")
-          .limit(1);
-          
-        if (data && data.length > 0) {
-          booking = data[0];
-        }
+      
+      const { data, error } = await supabase
+        .from("bookings")
+        .select("*")
+        .eq("buyer_id", user.id)
+        .eq("seller_id", providerId)
+        .eq("status", "pending")
+        .limit(1);
+        
+      if (data && data.length > 0) {
+        booking = data[0];
       }
 
       // If no pending booking exists, create one
@@ -646,7 +664,7 @@ export default function MapScreen({ navigation }) {
         const serviceType = matchedService || provider.specialization || "Expert Services";
         const locationStr = matchedLocation || provider.location || "Karachi";
         
-        const { data, error } = await supabase
+        const { data: newBooking, error: insertError } = await supabase
           .from("bookings")
           .insert([
             {
@@ -661,11 +679,11 @@ export default function MapScreen({ navigation }) {
           ])
           .select();
 
-        if (error) throw error;
-        booking = data[0];
+        if (insertError) throw insertError;
+        booking = newBooking[0];
       }
 
-      // Navigate to KarigarChat screen with booking details
+      // Navigate to KarigarChat screen with real booking details
       navigation.navigate("KarigarChat", {
         bookingId: booking.id,
         booking: booking,
@@ -679,9 +697,9 @@ export default function MapScreen({ navigation }) {
       console.log("Error initiating chat, using mock:", err);
       // Fallback for mock/offline testing
       navigation.navigate("KarigarChat", {
-        bookingId: "mock-booking-id-" + Date.now(),
+        bookingId: "mock-booking-id-" + provider.id,
         booking: {
-          id: "mock-booking-id",
+          id: "mock-booking-id-" + provider.id,
           price: provider.dynamicPrice || 1200,
           service_type: provider.specialization || "AC Service",
           location: provider.location || "Karachi"
