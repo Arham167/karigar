@@ -236,73 +236,7 @@ function parseLocalHeuristics(text) {
 }
 
 
-// 5. Vertex AI Gemini Multilingual Parser (Enterprise GCP - Charged to Project Credits)
-async function parseViaVertexAI(text) {
-  try {
-    const { VertexAI } = require("@google-cloud/vertexai");
-
-    // Initialize Vertex AI
-    // Automatically uses process.env.GOOGLE_APPLICATION_CREDENTIALS or gcloud CLI credentials
-    const projectId = process.env.GCP_PROJECT_ID;
-    const location = process.env.GCP_LOCATION || "us-central1";
-
-    const vertexAI = new VertexAI({ 
-      project: projectId, 
-      location: location 
-    });
-
-    const model = vertexAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
-      generationConfig: {
-        responseMimeType: "application/json"
-      }
-    });
-
-    const systemPrompt = `
-You are an expert multilingual entity extractor for a local home-services app named "Karigar".
-Analyze the user's service request, which can be in English, Urdu, or Roman Urdu (Urdu written in English alphabets like "mujhe plumber chahiye").
-Extract exactly 3 entities:
-1. "service" (the type of service or technician requested, e.g., Plumber, Electrician, AC Repair, Carpenter, Painter, Cleaner, etc.)
-2. "time" (when they need it, e.g., Today, Tomorrow, 5 PM, Immediately, Tomorrow Morning, etc.)
-3. "location" (the city, area, sector, or neighborhood mentioned, e.g., Gulshan-e-Iqbal, G-13, Clifton, Lahore, etc.)
-
-Your response MUST be strict JSON, with keys: "service", "time", "location".
-Each key must be a JSON object with:
-- "value": string (the parsed value normalized) or null if not found.
-- "confidence": a float between 0.0 and 1.0 representing your confidence, or null if value is null.
-
-Example Input: "mujhe kal subah gulshan mein ac repair k liye banda chahiye"
-Example Output:
-{
-  "service": { "value": "AC Repair", "confidence": 0.98 },
-  "time": { "value": "Tomorrow Morning", "confidence": 0.95 },
-  "location": { "value": "Gulshan", "confidence": 0.95 }
-}
-
-Provide ONLY the raw JSON output block. Do not include any explanation or markdown formatting outside of the JSON.
-`;
-
-    const request = {
-      contents: [{ role: "user", parts: [{ text: `${systemPrompt}\n\nUser Request: "${text}"` }] }],
-    };
-
-    const response = await model.generateContent(request);
-    
-    // Safety check to ensure we get candidate responses back
-    if (response && response.response && response.response.candidates && response.response.candidates[0]) {
-      const responseText = response.response.candidates[0].content.parts[0].text.trim();
-      
-      // Parse the JSON blocks
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
-      }
-    }
-  } catch (error) {
-    console.error("Vertex AI Gemini Extraction failed. Falling back to next parser in pipeline.", error);
-  }
-  return null;
-}
+// Removed Vertex AI integration in favor of lightweight standard Google Gen AI SDK
 
 // 4. Gemini LLM Multilingual Parser (Primary LLM if API Key is Present)
 
@@ -452,24 +386,10 @@ exports.parseRequest = async (text) => {
 
   console.log(`[NLP Engine] Parsing request: "${text}"`);
 
-  // Step A: If Vertex AI is configured, run Vertex AI (Preferred GCP hackathon credits route)
-  const gcpProjectId = process.env.GCP_PROJECT_ID;
-  if (gcpProjectId && gcpProjectId !== "your_gcp_project_id" && gcpProjectId !== "") {
-    console.log(`[NLP Engine] Attempting extraction via GCP Vertex AI (Project: ${gcpProjectId})`);
-    const vertexResult = await parseViaVertexAI(text);
-    if (vertexResult) {
-      // Resolve timestamp for Vertex AI results if present
-      if (vertexResult.time && vertexResult.time.value) {
-        vertexResult.time.resolvedTimestamp = resolveTimeToDate(vertexResult.time.value);
-      }
-      console.log("[NLP Engine] Successfully parsed via Vertex AI Gemini:", JSON.stringify(vertexResult));
-      return vertexResult;
-    }
-  }
-
-  // Step B: If standard Gemini key is available, run standard Gemini
+  // Step A: Parse via Standard Gemini LLM (Primary extraction engine)
   const geminiKey = process.env.GEMINI_API_KEY;
   if (geminiKey && geminiKey !== "your_gemini_key" && geminiKey !== "") {
+    console.log("[NLP Engine] Attempting extraction via standard Google Gemini API");
     const geminiResult = await parseViaGemini(text, geminiKey);
     if (geminiResult) {
       // Resolve timestamp for Gemini results if present
