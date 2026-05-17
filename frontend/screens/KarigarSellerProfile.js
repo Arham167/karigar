@@ -26,6 +26,7 @@ import {
   Wrench,
   ShieldCheck,
   Calendar,
+  MessageSquare,
 } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { supabase } from "../utils/supabase";
@@ -67,7 +68,7 @@ const DUMMY_SERVICES = [
   { name: "Full Room House Rewiring", price: "Rs. 4,500" },
 ];
 
-export default function KarigarSellerProfile({ provider, onClose, onBook }) {
+export default function KarigarSellerProfile({ provider, onClose, onBook, onChat }) {
   const [liked, setLiked] = useState(false);
   const [activeTab, setActiveTab] = useState("about");
   const [playing, setPlaying] = useState(false);
@@ -487,20 +488,29 @@ export default function KarigarSellerProfile({ provider, onClose, onBook }) {
         <View style={{ height: 130 }} />
       </ScrollView>
 
-      {/* ── Sticky Checkout Action Footer ── */}
       <View style={styles.footerSticky}>
         <View style={styles.priceContainer}>
           <Text style={styles.priceLabel}>Estimated Dynamic Quote</Text>
           <Text style={styles.priceValue}>Rs. {totalQuote.toLocaleString()}</Text>
         </View>
 
-        <TouchableOpacity 
-          style={styles.hireCtaButton} 
-          activeOpacity={0.8}
-          onPress={() => onBook({ ...seller, selectedSlot, dynamicPrice: totalQuote })}
-        >
-          <Text style={styles.hireCtaText}>Book {displayName} Now</Text>
-        </TouchableOpacity>
+        <View style={styles.footerActions}>
+          <TouchableOpacity 
+            style={styles.chatIconButton} 
+            activeOpacity={0.8}
+            onPress={() => onChat({ ...seller, selectedSlot, dynamicPrice: totalQuote })}
+          >
+            <MessageSquare size={20} color="#065F46" />
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.hireCtaButton} 
+            activeOpacity={0.8}
+            onPress={() => onBook({ ...seller, selectedSlot, dynamicPrice: totalQuote })}
+          >
+            <Text style={styles.hireCtaText}>Book Now</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -1102,6 +1112,23 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: "#065F46",
   },
+  footerActions: {
+    flex: 1.8,
+    flexDirection: "row",
+    alignItems: "center",
+    marginLeft: 16,
+    gap: 8,
+  },
+  chatIconButton: {
+    backgroundColor: "#ECFDF5",
+    borderWidth: 1.5,
+    borderColor: "#A7F3D0",
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   hireCtaButton: {
     flex: 1,
     height: 52,
@@ -1109,7 +1136,6 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",
-    marginLeft: 16,
     shadowColor: "#065F46",
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.15,

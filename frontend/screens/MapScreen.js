@@ -642,6 +642,89 @@ export default function MapScreen({ navigation }) {
     );
   };
 
+  const handleInitiateChat = async (provider) => {
+    try {
+      setIsSubmitting(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        showCustomAlert("Authentication Required", "Please log in to chat with the seller.", [{ text: "OK" }], "warning");
+        return;
+      }
+
+      // Check if a pending booking already exists for this buyer and provider
+      const providerId = provider.id && provider.id.startsWith("mock-") ? null : provider.id;
+      
+      let booking = null;
+      if (providerId) {
+        const { data, error } = await supabase
+          .from("bookings")
+          .select("*")
+          .eq("buyer_id", user.id)
+          .eq("provider_id", providerId)
+          .eq("status", "pending")
+          .limit(1);
+          
+        if (data && data.length > 0) {
+          booking = data[0];
+        }
+      }
+
+      // If no pending booking exists, create one
+      if (!booking) {
+        const dynamicPrice = provider.dynamicPrice || 1200;
+        const serviceType = matchedService || provider.specialization || "Expert Services";
+        const locationStr = matchedLocation || provider.location || "Karachi";
+        
+        const { data, error } = await supabase
+          .from("bookings")
+          .insert([
+            {
+              buyer_id: user.id,
+              provider_id: providerId,
+              service_type: serviceType,
+              location: locationStr,
+              requested_time: new Date().toISOString(),
+              price: dynamicPrice,
+              status: "pending",
+            }
+          ])
+          .select();
+
+        if (error) throw error;
+        booking = data[0];
+      }
+
+      // Navigate to KarigarChat screen with booking details
+      navigation.navigate("KarigarChat", {
+        bookingId: booking.id,
+        booking: booking,
+        provider: provider,
+        role: "buyer",
+        dynamicQuote: booking.price,
+        buyerName: userName || "Arham N."
+      });
+
+    } catch (err) {
+      console.log("Error initiating chat, using mock:", err);
+      // Fallback for mock/offline testing
+      navigation.navigate("KarigarChat", {
+        bookingId: "mock-booking-id-" + Date.now(),
+        booking: {
+          id: "mock-booking-id",
+          price: provider.dynamicPrice || 1200,
+          service_type: provider.specialization || "AC Service",
+          location: provider.location || "Karachi"
+        },
+        provider: provider,
+        role: "buyer",
+        dynamicQuote: provider.dynamicPrice || 1200,
+        buyerName: userName || "Arham N."
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleSignOut = async () => {
     showCustomAlert(
       "Sign Out",
@@ -1149,6 +1232,12 @@ export default function MapScreen({ navigation }) {
             // Delay slightly to allow modal to close smoothly before alert pops
             setTimeout(() => {
               handleBookProvider(provider);
+            }, 300);
+          }}
+          onChat={(provider) => {
+            setShowProfileModal(false);
+            setTimeout(() => {
+              handleInitiateChat(provider);
             }, 300);
           }}
         />

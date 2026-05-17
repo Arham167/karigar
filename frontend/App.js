@@ -11,6 +11,7 @@ import SellerProfileSetupScreen from "./screens/SellerProfileSetupScreen";
 import VerifyOTPScreen from "./screens/VerifyOTPScreen";
 import MapScreen from "./screens/MapScreen";
 import SellerDashboard from "./screens/SellerDashboard";
+import KarigarChat from "./screens/KarigarChat";
 
 const Stack = createNativeStackNavigator();
 
@@ -27,6 +28,7 @@ export default function App() {
           <Stack.Screen name="SellerProfileSetup" component={SellerProfileSetupScreen} options={{ headerShown: false }} />
           <Stack.Screen name="Map" component={MapScreen} options={{ headerShown: false }} />
           <Stack.Screen name="SellerDashboard" component={SellerDashboard} options={{ title: 'Seller Dashboard' }} />
+          <Stack.Screen name="KarigarChat" component={KarigarChat} options={{ headerShown: false }} />
         </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>

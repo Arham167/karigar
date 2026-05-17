@@ -100,3 +100,8 @@ CREATE TABLE provider_cancellations (
   booking_id UUID REFERENCES bookings(id),
   cancelled_at TIMESTAMP DEFAULT NOW()
 );
+
+-- ── MIGRATION ADITIONS: SECURE NEGO-CHAT AGREEMENT LOCKS ──
+-- Run this in your Supabase SQL Editor to support the agreement lock flow:
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS buyer_agreed BOOLEAN DEFAULT FALSE;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS seller_agreed BOOLEAN DEFAULT FALSE;
