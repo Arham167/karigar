@@ -103,55 +103,7 @@ const DICTIONARY = {
   ]
 };
 
-// 1. Hugging Face Named Entity Recognition for Location
-async function extractLocationViaHF(text, apiKey = null) {
-  try {
-    const url = "https://api-inference.huggingface.co/models/Davlan/xlm-roberta-base-wikiann-ner";
-    const headers = apiKey ? { Authorization: `Bearer ${apiKey}` } : {};
-    
-    // We set a moderate timeout so the application does not hang
-    const response = await axios.post(
-      url, 
-      { inputs: text }, 
-      { headers, timeout: 6000 }
-    );
-
-    if (Array.isArray(response.data)) {
-      // WikiANN entities: LOC, PER, ORG
-      // We look specifically for "LOC" (Location)
-      const locEntities = response.data.filter(
-        (ent) => ent.entity_group === "LOC" || ent.entity === "B-LOC" || ent.entity === "I-LOC"
-      );
-
-      if (locEntities.length > 0) {
-        // Reassemble sub-words/tokens if model split them
-        // xlm-roberta uses "_" or "##" or similar sub-word tokens
-        let locationName = "";
-        let totalScore = 0;
-        
-        locEntities.forEach((ent) => {
-          let word = ent.word || "";
-          // Clean standard sentencepiece / roberta token prefixes
-          word = word.replace(/^[▄_ ]+/, "").trim();
-          if (word) {
-            locationName += (locationName ? " " : "") + word;
-            totalScore += ent.score || 0.90;
-          }
-        });
-
-        if (locationName.trim()) {
-          return {
-            value: locationName.trim(),
-            confidence: Math.round((totalScore / locEntities.length) * 100) / 100
-          };
-        }
-      }
-    }
-  } catch (error) {
-    console.warn("Hugging Face API call failed or timed out. Falling back to local parser.", error.message);
-  }
-  return null;
-}
+// Hugging Face integration removed to optimize latency and eliminate 404 proxy routing issues.
 
 // 2. Local Regex/Heuristics Multilingual Parser
 function parseLocalHeuristics(text) {
@@ -386,12 +338,10 @@ exports.parseRequest = async (text) => {
 
   console.log(`[NLP Engine] Parsing request: "${text}"`);
 
-  // Step A: Run local Heuristics & Hugging Face first (Fast & Free Primary Engine)
-  const hfKey = process.env.HF_API_KEY;
-  const hfLocation = await extractLocationViaHF(text, hfKey);
+  // Step A: Run local Heuristics first (Fast & Free Primary Engine - 0ms latency)
   const heuristics = parseLocalHeuristics(text);
 
-  const heuristicLocation = hfLocation || heuristics.locationResult;
+  const heuristicLocation = heuristics.locationResult;
   const heuristicService = heuristics.serviceResult;
   const heuristicTime = heuristics.timeResult;
 
@@ -411,11 +361,11 @@ exports.parseRequest = async (text) => {
       time: heuristicTime,
       location: heuristicLocation
     };
-    console.log("[NLP Engine] Successfully parsed via Heuristics/HF (Primary):", JSON.stringify(result));
+    console.log("[NLP Engine] Successfully parsed via Heuristics (Primary):", JSON.stringify(result));
     return result;
   }
 
-  console.log("[NLP Engine] Heuristics/HF incomplete. Falling back to Gemini LLM for deep extraction...");
+  console.log("[NLP Engine] Heuristics incomplete. Falling back to Gemini LLM for deep extraction...");
 
   // Step B: Fallback to Standard Gemini LLM (Intelligent Semantic Extraction)
   const geminiKey = process.env.GEMINI_API_KEY;
@@ -431,12 +381,12 @@ exports.parseRequest = async (text) => {
     }
   }
 
-  // Step C: Ultimate Fallback (Return whatever Heuristics/HF found, even if incomplete)
+  // Step C: Ultimate Fallback (Return whatever Heuristics found, even if incomplete)
   const finalResult = {
     service: heuristicService,
     time: heuristicTime,
     location: heuristicLocation
   };
-  console.log("[NLP Engine] Gemini failed or not configured. Returning incomplete Heuristics/HF:", JSON.stringify(finalResult));
+  console.log("[NLP Engine] Gemini failed or not configured. Returning incomplete Heuristics:", JSON.stringify(finalResult));
   return finalResult;
 };
