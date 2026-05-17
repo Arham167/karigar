@@ -40,6 +40,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { supabase } from "../utils/supabase";
 import { useAuthStore } from "../store/authStore";
+import KarigarSellerProfile from "./KarigarSellerProfile";
 import {
   useFonts,
   DMSans_400Regular,
@@ -198,6 +199,10 @@ export default function MapScreen({ navigation }) {
   // Requests List States
   const [bookings, setBookings] = useState([]);
   const [loadingBookings, setLoadingBookings] = useState(false);
+
+  // Selected Provider Profile Modal States
+  const [selectedProvider, setSelectedProvider] = useState(null);
+  const [showProfileModal, setShowProfileModal] = useState(false);
 
   // Custom Alert Popup State
   const [customAlert, setCustomAlert] = useState({
@@ -808,7 +813,10 @@ export default function MapScreen({ navigation }) {
                     <Marker
                       key={provider.id}
                       coordinate={{ latitude: provider.lat, longitude: provider.lng }}
-                      onPress={() => handleBookProvider(provider)}
+                      onPress={() => {
+                        setSelectedProvider(provider);
+                        setShowProfileModal(true);
+                      }}
                     >
                       <View style={styles.premiumPopupMarker}>
                         <View style={styles.popupCard}>
@@ -1122,6 +1130,26 @@ export default function MapScreen({ navigation }) {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Seller Profile Modal Popup */}
+      <Modal
+        visible={showProfileModal}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setShowProfileModal(false)}
+      >
+        <KarigarSellerProfile
+          provider={selectedProvider}
+          onClose={() => setShowProfileModal(false)}
+          onBook={(provider) => {
+            setShowProfileModal(false);
+            // Delay slightly to allow modal to close smoothly before alert pops
+            setTimeout(() => {
+              handleBookProvider(provider);
+            }, 300);
+          }}
+        />
+      </Modal>
 
       {/* Custom Premium Alert Popups */}
       <CustomAlertModal />
