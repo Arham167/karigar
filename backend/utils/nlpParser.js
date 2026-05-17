@@ -386,44 +386,57 @@ exports.parseRequest = async (text) => {
 
   console.log(`[NLP Engine] Parsing request: "${text}"`);
 
-  // Step A: Parse via Standard Gemini LLM (Primary extraction engine)
+  // Step A: Run local Heuristics & Hugging Face first (Fast & Free Primary Engine)
+  const hfKey = process.env.HF_API_KEY;
+  const hfLocation = await extractLocationViaHF(text, hfKey);
+  const heuristics = parseLocalHeuristics(text);
+
+  const heuristicLocation = hfLocation || heuristics.locationResult;
+  const heuristicService = heuristics.serviceResult;
+  const heuristicTime = heuristics.timeResult;
+
+  // Resolve timestamp for heuristic time if present
+  if (heuristicTime && heuristicTime.value) {
+    heuristicTime.resolvedTimestamp = resolveTimeToDate(heuristicTime.value);
+  }
+
+  // Check if we successfully extracted ALL 3 required details (Service, Time, Location)
+  const hasService = heuristicService && heuristicService.value;
+  const hasTime = heuristicTime && heuristicTime.value;
+  const hasLocation = heuristicLocation && heuristicLocation.value;
+
+  if (hasService && hasTime && hasLocation) {
+    const result = {
+      service: heuristicService,
+      time: heuristicTime,
+      location: heuristicLocation
+    };
+    console.log("[NLP Engine] Successfully parsed via Heuristics/HF (Primary):", JSON.stringify(result));
+    return result;
+  }
+
+  console.log("[NLP Engine] Heuristics/HF incomplete. Falling back to Gemini LLM for deep extraction...");
+
+  // Step B: Fallback to Standard Gemini LLM (Intelligent Semantic Extraction)
   const geminiKey = process.env.GEMINI_API_KEY;
   if (geminiKey && geminiKey !== "your_gemini_key" && geminiKey !== "") {
-    console.log("[NLP Engine] Attempting extraction via standard Google Gemini API");
+    console.log("[NLP Engine] Attempting extraction via standard Google Gemini API (Fallback)");
     const geminiResult = await parseViaGemini(text, geminiKey);
     if (geminiResult) {
-      // Resolve timestamp for Gemini results if present
       if (geminiResult.time && geminiResult.time.value) {
         geminiResult.time.resolvedTimestamp = resolveTimeToDate(geminiResult.time.value);
       }
-      console.log("[NLP Engine] Successfully parsed via Gemini:", JSON.stringify(geminiResult));
+      console.log("[NLP Engine] Successfully parsed via Gemini (Fallback):", JSON.stringify(geminiResult));
       return geminiResult;
     }
   }
 
-  // Step B: Run Hugging Face Model for Location extraction
-  const hfKey = process.env.HF_API_KEY;
-  const hfLocation = await extractLocationViaHF(text, hfKey);
-
-  // Step C: Run Heuristic Rules for Service, Time, and Location (Fallback)
-  const heuristics = parseLocalHeuristics(text);
-
-  // Step D: Synthesize & Merge Results
-  // We prefer Hugging Face location if it found one, otherwise heuristic location
-  const finalLocation = hfLocation || heuristics.locationResult;
-  const finalService = heuristics.serviceResult;
-  const finalTime = heuristics.timeResult;
-
-  if (finalTime && finalTime.value) {
-    finalTime.resolvedTimestamp = resolveTimeToDate(finalTime.value);
-  }
-
-  const result = {
-    service: finalService,
-    time: finalTime,
-    location: finalLocation
+  // Step C: Ultimate Fallback (Return whatever Heuristics/HF found, even if incomplete)
+  const finalResult = {
+    service: heuristicService,
+    time: heuristicTime,
+    location: heuristicLocation
   };
-
-  console.log("[NLP Engine] Parsed via HF/Heuristics:", JSON.stringify(result));
-  return result;
+  console.log("[NLP Engine] Gemini failed or not configured. Returning incomplete Heuristics/HF:", JSON.stringify(finalResult));
+  return finalResult;
 };
