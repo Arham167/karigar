@@ -164,7 +164,7 @@ function parseLocalHeuristics(text) {
   for (const service of DICTIONARY.services) {
     for (const keyword of service.keywords) {
       // Word boundary matching to prevent partial matching (like "clean" inside "cleaning" is fine, but lets be precise)
-      const escapedKeyword = keyword.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+      const escapedKeyword = keyword.replace(/[\/\\^$*+?.()|[\]{}]/g, '\\$&');
       const regex = new RegExp(`\\b${escapedKeyword}\\b|${escapedKeyword}`, "iu");
       if (regex.test(cleanText)) {
         serviceResult = {
@@ -190,7 +190,7 @@ function parseLocalHeuristics(text) {
     // Check dictionary
     for (const time of DICTIONARY.times) {
       for (const keyword of time.keywords) {
-        const escapedKeyword = keyword.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        const escapedKeyword = keyword.replace(/[\/\\^$*+?.()|[\]{}]/g, '\\$&');
         const regex = new RegExp(`\\b${escapedKeyword}\\b|${escapedKeyword}`, "iu");
         if (regex.test(cleanText)) {
           timeResult = {
@@ -206,7 +206,7 @@ function parseLocalHeuristics(text) {
 
   // C. Extract Location (supplementary dictionary lookup)
   for (const loc of DICTIONARY.locations) {
-    const escapedLoc = loc.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const escapedLoc = loc.replace(/[\/\\^$*+?.()|[\]{}]/g, '\\$&');
     const regex = new RegExp(`\\b${escapedLoc}\\b|${escapedLoc}`, "iu");
     if (regex.test(cleanText)) {
       locationResult = {

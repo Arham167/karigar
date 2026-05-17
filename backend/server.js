@@ -39,7 +39,16 @@ app.use("/api/disputes", require("./routes/disputes"));
 app.use("/api/intent", require("./routes/intent"));
 app.use("/api/antigravity", require("./routes/antigravity"));
 
+app.get("/", (req, res) => {
+  res.status(200).json({
+    status: "online",
+    message: "Karigar Parsing Engine & API Backend is running!",
+    timestamp: new Date().toISOString()
+  });
+});
+
 app.use(require("./middleware/errorHandler"));
+
 
 const PORT = process.env.PORT || 3000;
 if (process.env.NODE_ENV !== "production") {
