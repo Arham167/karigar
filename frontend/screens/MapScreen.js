@@ -44,6 +44,10 @@ import {
 
 const { width, height } = Dimensions.get("window");
 
+// Hardcode public tunnel for development to bypass environment variable caching issues
+const BASE_URL = 'https://karigar-arham-nomans-projects.vercel.app';
+
+
 // Custom Map Style for a clean, premium emerald-tinged theme
 const customMapStyle = [
   {
@@ -315,13 +319,59 @@ export default function MapScreen({ navigation }) {
         return;
       }
 
-      // Add a pending booking in Supabase
+      console.log(`[Frontend] Querying intent parser at: ${BASE_URL}/api/intent/parse`);
+      
+      // Call the dynamic backend intent parsing API
+      const response = await fetch(`${BASE_URL}/api/intent/parse`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Bypass-Tunnel-Reminder": "true",
+        },
+        body: JSON.stringify({ text: jobDescription }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to connect to the parsing engine. Please check your internet connection.");
+      }
+
+      const parseResult = await response.json();
+      
+      if (!parseResult.success) {
+        throw new Error(parseResult.error || "Failed to analyze your request.");
+      }
+
+      const { service, time, location: parsedLocation } = parseResult;
+
+      // Validate that service, time, and location are not null
+      const missingDetails = [];
+      if (!service || !service.value) {
+        missingDetails.push("Service Type (e.g. Plumber, Electrician, AC Repair)");
+      }
+      if (!time || !time.value) {
+        missingDetails.push("Requested Time (e.g. today at 5 PM, tomorrow, urgently)");
+      }
+      if (!parsedLocation || !parsedLocation.value) {
+        missingDetails.push("Location (e.g. Gulshan, Clifton, Johar)");
+      }
+
+      if (missingDetails.length > 0) {
+        Alert.alert(
+          "Details Required 🛠️",
+          `To match you with the best Karigar, please specify the following in your request:\n\n${missingDetails.map(detail => `• ${detail}`).join("\n")}\n\nExample: "I need a plumber at 5 PM in Gulshan."`,
+          [{ text: "Edit Request", style: "cancel" }]
+        );
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Add a pending booking in Supabase with parsed entities
       const { error } = await supabase.from("bookings").insert([
         {
           buyer_id: user.id,
-          service_type: "General Request",
-          location: "Current Location",
-          requested_time: new Date().toISOString(),
+          service_type: service.value,
+          location: parsedLocation.value,
+          requested_time: time.resolvedTimestamp || new Date().toISOString(),
           price: 1500, // Est base rate
           status: "pending",
         },
@@ -331,7 +381,7 @@ export default function MapScreen({ navigation }) {
 
       Alert.alert(
         "Job Requested Successfully! 🎉",
-        "Your AI-powered request is being matched with nearby Karigars. We'll alert you as soon as they respond!",
+        `Your request for ${service.value} at ${parsedLocation.value} for ${time.value} has been parsed & posted. Nearby Karigars are being notified!`,
         [{ text: "Awesome", onPress: () => {
           setJobDescription("");
           setActiveTab("requests");

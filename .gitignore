@@ -30,3 +30,6 @@ Thumbs.db
 # IDE files
 .vscode/
 .idea/
+
+# Google Cloud Keys
+**/gcp-key.json
