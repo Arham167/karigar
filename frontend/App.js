@@ -25,7 +25,7 @@ export default function App() {
           <Stack.Screen name="RoleSelection" component={RoleSelectionScreen} options={{ headerShown: false }} />
           <Stack.Screen name="ProfileSetup" component={ProfileSetupScreen} options={{ headerShown: false }} />
           <Stack.Screen name="SellerProfileSetup" component={SellerProfileSetupScreen} options={{ headerShown: false }} />
-          <Stack.Screen name="Map" component={MapScreen} options={{ title: 'Find Services' }} />
+          <Stack.Screen name="Map" component={MapScreen} options={{ headerShown: false }} />
           <Stack.Screen name="SellerDashboard" component={SellerDashboard} options={{ title: 'Seller Dashboard' }} />
         </Stack.Navigator>
       </NavigationContainer>

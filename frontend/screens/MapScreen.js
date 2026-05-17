@@ -1,30 +1,673 @@
-import React, { useState } from "react";
-import { View, TextInput, Button, Text, StyleSheet } from "react-native";
-// import MapView, { Marker } from "react-native-maps"; // Requires setup
+import React, { useState, useEffect, useRef } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  TextInput,
+  Image,
+  Dimensions,
+  Platform,
+  ActivityIndicator,
+  Animated,
+  KeyboardAvoidingView,
+  ScrollView,
+  Alert,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import MapView, { Marker } from "react-native-maps";
+import * as Location from "expo-location";
+import {
+  Menu,
+  Mic,
+  ArrowRight,
+  Home,
+  ClipboardList,
+  User,
+  LogOut,
+  MapPin,
+  Star,
+  CheckCircle,
+  Clock,
+  Volume2,
+  Compass,
+} from "lucide-react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { supabase } from "../utils/supabase";
+import { useAuthStore } from "../store/authStore";
+import {
+  useFonts,
+  DMSans_400Regular,
+  DMSans_500Medium,
+  DMSans_700Bold,
+} from "@expo-google-fonts/dm-sans";
+
+const { width, height } = Dimensions.get("window");
+
+// Custom Map Style for a clean, premium emerald-tinged theme
+const customMapStyle = [
+  {
+    "elementType": "geometry",
+    "stylers": [{ "color": "#f5f5f5" }]
+  },
+  {
+    "elementType": "labels.icon",
+    "stylers": [{ "visibility": "off" }]
+  },
+  {
+    "elementType": "labels.text.fill",
+    "stylers": [{ "color": "#616161" }]
+  },
+  {
+    "elementType": "labels.text.stroke",
+    "stylers": [{ "color": "#f5f5f5" }]
+  },
+  {
+    "featureType": "landscape.natural",
+    "elementType": "geometry.fill",
+    "stylers": [{ "color": "#e2ebd9" }]
+  },
+  {
+    "featureType": "poi.park",
+    "elementType": "geometry.fill",
+    "stylers": [{ "color": "#d6e9d0" }]
+  },
+  {
+    "featureType": "road",
+    "elementType": "geometry",
+    "stylers": [{ "color": "#ffffff" }]
+  },
+  {
+    "featureType": "water",
+    "elementType": "geometry.fill",
+    "stylers": [{ "color": "#d2ebfa" }]
+  }
+];
+
+// Pulsing Marker Component for nearby Karigars
+const PulsingMarker = ({ provider, onPress }) => {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const opacityAnim = useRef(new Animated.Value(0.6)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.parallel([
+        Animated.timing(scaleAnim, {
+          toValue: 2.2,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacityAnim, {
+          toValue: 0,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, []);
+
+  return (
+    <Marker
+      coordinate={{ latitude: provider.latitude, longitude: provider.longitude }}
+      onPress={onPress}
+    >
+      <View style={styles.markerContainer}>
+        {/* Pulsing ring */}
+        <Animated.View
+          style={[
+            styles.pulsingRing,
+            {
+              transform: [{ scale: scaleAnim }],
+              opacity: opacityAnim,
+            },
+          ]}
+        />
+        {/* Core Dot */}
+        <View style={styles.markerDot} />
+        
+        {/* Tiny Tooltip */}
+        <View style={styles.markerTooltip}>
+          <Text style={styles.markerTooltipText}>★ {provider.rating}</Text>
+        </View>
+      </View>
+    </Marker>
+  );
+};
 
 export default function MapScreen({ navigation }) {
-  const [request, setRequest] = useState("");
+  const insets = useSafeAreaInsets();
+  const mapRef = useRef(null);
+  const [fontsLoaded] = useFonts({
+    DMSans_400Regular,
+    DMSans_500Medium,
+    DMSans_700Bold,
+  });
 
-  const handleFindServices = () => {
-    console.log("Finding services for:", request);
-    // Mock navigation to detail for now
-    // navigation.navigate("ProviderDetail", { provider: { name: "Mock Provider" } });
+  // State Declarations
+  const [activeTab, setActiveTab] = useState("home");
+  const [jobDescription, setJobDescription] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // User Profile States
+  const [profileImage, setProfileImage] = useState("https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=400&auto=format&fit=crop");
+  const [userName, setUserName] = useState("Karigar User");
+  const [userCnic, setUserCnic] = useState("");
+
+  // Location & Map States
+  const [location, setLocation] = useState(null);
+  const [region, setRegion] = useState({
+    latitude: 24.8607, // Default Karachi (Gulshan Area fallback)
+    longitude: 67.0011,
+    latitudeDelta: 0.015,
+    longitudeDelta: 0.015,
+  });
+  const [providers, setProviders] = useState([]);
+  const [loadingLocation, setLoadingLocation] = useState(true);
+
+  // Voice Interaction States
+  const [isListening, setIsListening] = useState(false);
+  const voiceScale = useRef(new Animated.Value(1)).current;
+
+  // Requests List States
+  const [bookings, setBookings] = useState([]);
+  const [loadingBookings, setLoadingBookings] = useState(false);
+
+  // Load Profile and Location on Mount
+  useEffect(() => {
+    loadUserProfile();
+    requestLocationAndLoadProviders();
+  }, []);
+
+  // Fetch Bookings when entering Requests Tab
+  useEffect(() => {
+    if (activeTab === "requests") {
+      fetchBookings();
+    }
+  }, [activeTab]);
+
+  // Voice UI Pulse Animation
+  useEffect(() => {
+    if (isListening) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(voiceScale, {
+            toValue: 1.4,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+          Animated.timing(voiceScale, {
+            toValue: 1.0,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    } else {
+      voiceScale.setValue(1.0);
+    }
+  }, [isListening]);
+
+  const loadUserProfile = async () => {
+    try {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (user && !userError) {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("name, profile_image_url, cnic")
+          .eq("id", user.id)
+          .single();
+        
+        if (data && !error) {
+          if (data.name) setUserName(data.name);
+          if (data.profile_image_url) setProfileImage(data.profile_image_url);
+          if (data.cnic) setUserCnic(data.cnic);
+        }
+      }
+    } catch (err) {
+      console.log("Error loading user profile:", err);
+    }
   };
+
+  const requestLocationAndLoadProviders = async () => {
+    try {
+      setLoadingLocation(true);
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Location Permission Denied",
+          "We will use a default location. To see professionals near you, please enable location permissions in settings."
+        );
+        setLoadingLocation(false);
+        return;
+      }
+
+      let currentLoc = await Location.getCurrentPositionAsync({});
+      setLocation(currentLoc);
+      
+      const newRegion = {
+        latitude: currentLoc.coords.latitude,
+        longitude: currentLoc.coords.longitude,
+        latitudeDelta: 0.015,
+        longitudeDelta: 0.015,
+      };
+      setRegion(newRegion);
+    } catch (error) {
+      console.log("Error getting current location:", error);
+    } finally {
+      setLoadingLocation(false);
+    }
+  };
+
+  const centerOnUserLocation = async () => {
+    try {
+      let currentLoc = await Location.getCurrentPositionAsync({});
+      setLocation(currentLoc);
+      
+      const newRegion = {
+        latitude: currentLoc.coords.latitude,
+        longitude: currentLoc.coords.longitude,
+        latitudeDelta: 0.015,
+        longitudeDelta: 0.015,
+      };
+      
+      if (mapRef.current) {
+        mapRef.current.animateToRegion(newRegion, 1000);
+      }
+    } catch (error) {
+      console.log("Error centering location:", error);
+      Alert.alert("Location Error", "Could not fetch your current coordinates. Please ensure GPS is enabled.");
+    }
+  };
+
+  const fetchBookings = async () => {
+    setLoadingBookings(true);
+    try {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (user && !userError) {
+        const { data, error } = await supabase
+          .from("bookings")
+          .select("*")
+          .eq("buyer_id", user.id)
+          .order("created_at", { ascending: false });
+
+        if (error) throw error;
+        setBookings(data || []);
+      }
+    } catch (err) {
+      console.log("Error loading bookings:", err);
+    } finally {
+      setLoadingBookings(false);
+    }
+  };
+
+  const handleRequestKarigar = async () => {
+    if (!jobDescription.trim()) {
+      Alert.alert("Request Details Required", "Please describe what service you need before continuing.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        Alert.alert("Session Expired", "Please log in again.");
+        navigation.navigate("Auth");
+        return;
+      }
+
+      // Add a pending booking in Supabase
+      const { error } = await supabase.from("bookings").insert([
+        {
+          buyer_id: user.id,
+          service_type: "General Request",
+          location: "Current Location",
+          requested_time: new Date().toISOString(),
+          price: 1500, // Est base rate
+          status: "pending",
+        },
+      ]);
+
+      if (error) throw error;
+
+      Alert.alert(
+        "Job Requested Successfully! 🎉",
+        "Your AI-powered request is being matched with nearby Karigars. We'll alert you as soon as they respond!",
+        [{ text: "Awesome", onPress: () => {
+          setJobDescription("");
+          setActiveTab("requests");
+        }}]
+      );
+    } catch (error) {
+      Alert.alert("Error placing request", error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const triggerVoiceSearch = () => {
+    setIsListening(true);
+    // Simulate speech-to-text typing out a job request
+    setTimeout(() => {
+      setJobDescription("I need an expert AC specialist to service my split unit because it's not cooling properly.");
+      setIsListening(false);
+    }, 2800);
+  };
+
+  const handleSignOut = async () => {
+    Alert.alert("Sign Out", "Are you sure you want to sign out?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Sign Out",
+        style: "destructive",
+        onPress: async () => {
+          await supabase.auth.signOut();
+          useAuthStore.getState().clearAuth();
+          navigation.reset({
+            index: 0,
+            routes: [{ name: "Auth" }],
+          });
+        },
+      },
+    ]);
+  };
+
+  if (!fontsLoaded) {
+    return (
+      <View style={styles.loaderContainer}>
+        <ActivityIndicator size="large" color="#065F46" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.label}>What service do you need?</Text>
-        <TextInput
-          placeholder="E.g., Mujhe kal subah G-13 mein AC technician chahiye"
-          value={request}
-          onChangeText={setRequest}
-          style={styles.input}
-        />
-        <Button title="Find Services" onPress={handleFindServices} />
-      </View>
-      <View style={styles.mapPlaceholder}>
-        <Text>Map goes here</Text>
+      {/* Dynamic Tab Views */}
+      {activeTab === "home" && (
+        <View style={styles.mapTabContainer}>
+          {/* Solid Top Header */}
+          <View style={[styles.solidHeader, { paddingTop: Math.max(insets.top, 12) }]}>
+            <View style={styles.headerContent}>
+              <View style={styles.headerLeft}>
+                <TouchableOpacity style={styles.menuButton} activeOpacity={0.8}>
+                  <Menu size={28} color="#065F46" />
+                </TouchableOpacity>
+                <Text style={styles.brandTitle}>Karigar</Text>
+              </View>
+
+              <TouchableOpacity 
+                style={styles.profileBtn}
+                onPress={() => setActiveTab("profile")}
+                activeOpacity={0.8}
+              >
+                <Image source={{ uri: profileImage }} style={styles.profileAvatar} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Map Section Wrapper */}
+          <View style={styles.mapWrapper}>
+            {loadingLocation ? (
+              <View style={styles.mapLoading}>
+                <ActivityIndicator size="large" color="#065F46" />
+                <Text style={styles.loadingText}>Fetching live coordinates...</Text>
+              </View>
+            ) : (
+              <>
+                <MapView
+                  ref={mapRef}
+                  style={StyleSheet.absoluteFillObject}
+                  initialRegion={region}
+                  showsUserLocation={true}
+                  showsMyLocationButton={false}
+                  customMapStyle={customMapStyle}
+                />
+                
+                {/* Custom My-Location Centering Button */}
+                <TouchableOpacity
+                  style={styles.myLocationFloatingButton}
+                  activeOpacity={0.8}
+                  onPress={centerOnUserLocation}
+                >
+                  <Compass size={24} color="#065F46" />
+                </TouchableOpacity>
+              </>
+            )}
+
+            {/* Request Card Overlay */}
+            <KeyboardAvoidingView
+              behavior={Platform.OS === "ios" ? "padding" : "height"}
+              keyboardVerticalOffset={Platform.OS === "ios" ? 140 : 0}
+              style={styles.requestCardContainer}
+            >
+              <View style={styles.requestCard}>
+                <View style={styles.cardHeader}>
+                  <Text style={styles.cardTitle}>Describe your job</Text>
+                </View>
+
+                <View style={styles.inputContainer}>
+                  <TextInput
+                    placeholder="e.g. I need a plumber to fix a leaking tap in Gulshan."
+                    placeholderTextColor="#9CA3AF"
+                    multiline
+                    style={styles.textArea}
+                    value={jobDescription}
+                    onChangeText={setJobDescription}
+                  />
+                  <TouchableOpacity
+                    style={styles.micInputButton}
+                    activeOpacity={0.8}
+                    onPress={triggerVoiceSearch}
+                  >
+                    <Mic size={24} color="#065F46" />
+                  </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.requestCta}
+                  activeOpacity={0.8}
+                  onPress={handleRequestKarigar}
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <ActivityIndicator color="white" />
+                  ) : (
+                    <>
+                      <Text style={styles.ctaText}>Request a Karigar</Text>
+                      <ArrowRight size={26} color="white" />
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </KeyboardAvoidingView>
+          </View>
+        </View>
+      )}
+
+      {/* Requests Tab */}
+      {activeTab === "requests" && (
+        <View style={[styles.tabContent, { paddingTop: Math.max(insets.top, 20) }]}>
+          <Text style={styles.tabHeading}>My Requests</Text>
+          <Text style={styles.tabSubheading}>Track your current and previous job postings</Text>
+
+          {loadingBookings ? (
+            <View style={styles.tabLoader}>
+              <ActivityIndicator size="large" color="#065F46" />
+            </View>
+          ) : bookings.length === 0 ? (
+            <ScrollView contentContainerStyle={styles.emptyContainer} showsVerticalScrollIndicator={false}>
+              <Image 
+                source={{ uri: "https://images.unsplash.com/photo-1579208575657-c595a05383b7?q=80&w=400" }} 
+                style={styles.emptyImage}
+              />
+              <Text style={styles.emptyText}>No Active Requests</Text>
+              <Text style={styles.emptySubtext}>When you submit a request for a Karigar, it will show up here in real time!</Text>
+              <TouchableOpacity 
+                style={styles.emptyCta}
+                onPress={() => setActiveTab("home")}
+              >
+                <Text style={styles.emptyCtaText}>Describe a Job Now</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          ) : (
+            <ScrollView contentContainerStyle={styles.listContainer} showsVerticalScrollIndicator={false}>
+              {bookings.map((booking) => (
+                <View key={booking.id} style={styles.bookingCard}>
+                  <View style={styles.bookingCardHeader}>
+                    <View style={styles.bookingIconBadge}>
+                      <MapPin size={24} color="#065F46" />
+                    </View>
+                    <View style={styles.bookingHeaderInfo}>
+                      <Text style={styles.bookingTitle}>{booking.service_type}</Text>
+                      <Text style={styles.bookingTime}>
+                        {new Date(booking.requested_time).toLocaleDateString()} at{" "}
+                        {new Date(booking.requested_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </Text>
+                    </View>
+                    <View style={[
+                      styles.statusBadge, 
+                      booking.status === "pending" ? styles.statusPending : styles.statusSuccess
+                    ]}>
+                      <Text style={[
+                        styles.statusText, 
+                        booking.status === "pending" ? styles.statusTextPending : styles.statusTextSuccess
+                      ]}>
+                        {booking.status.toUpperCase()}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.divider} />
+
+                  <View style={styles.bookingBody}>
+                    <View style={styles.bodyRow}>
+                      <Clock size={16} color="#6B7280" />
+                      <Text style={styles.bodyRowText}>Estimated Rate: Rs. {booking.price}</Text>
+                    </View>
+                    <View style={styles.bodyRow}>
+                      <MapPin size={16} color="#6B7280" />
+                      <Text style={styles.bodyRowText} numberOfLines={1}>{booking.location}</Text>
+                    </View>
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+          )}
+        </View>
+      )}
+
+      {/* Profile Tab */}
+      {activeTab === "profile" && (
+        <ScrollView style={[styles.tabContent, { paddingTop: Math.max(insets.top, 20) }]} contentContainerStyle={{ paddingBottom: 120 }}>
+          <Text style={styles.tabHeading}>My Profile</Text>
+          <Text style={styles.tabSubheading}>Manage your personal credentials & preferences</Text>
+
+          {/* Profile Card */}
+          <View style={styles.profileViewCard}>
+            <View style={styles.profileHeaderBox}>
+              <View style={styles.profileBorder}>
+                <Image source={{ uri: profileImage }} style={styles.profileLargeAvatar} />
+              </View>
+              <Text style={styles.profileName}>{userName}</Text>
+              <View style={styles.roleLabel}>
+                <Text style={styles.roleLabelText}>BUYER PROFILE</Text>
+              </View>
+            </View>
+
+            <View style={styles.divider} />
+
+            <View style={styles.profileDetailsList}>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Verification CNIC</Text>
+                <Text style={styles.detailValue}>{userCnic || "Not Set Yet"}</Text>
+              </View>
+
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Account Type</Text>
+                <Text style={styles.detailValue}>Customer (Hiring)</Text>
+              </View>
+
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Platform Rating</Text>
+                <View style={styles.ratingRow}>
+                  <Star size={16} color="#FBBF24" fill="#FBBF24" />
+                  <Text style={styles.ratingText}>5.0 (Excellent)</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+
+          {/* Settings Options */}
+          <View style={styles.settingsSection}>
+            <TouchableOpacity 
+              style={styles.signOutButton} 
+              activeOpacity={0.8}
+              onPress={handleSignOut}
+            >
+              <LogOut size={24} color="#EF4444" />
+              <Text style={styles.signOutButtonText}>Sign Out of Karigar</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      )}
+
+      {/* Voice Assistant Visualizer Overlay */}
+      {isListening && (
+        <View style={styles.voiceOverlay}>
+          <View style={styles.voiceOverlayContent}>
+            <Text style={styles.voiceTitle}>Speak clearly now...</Text>
+            <Text style={styles.voiceSubtitle}>"I need a plumber to fix the kitchen..."</Text>
+            <Animated.View
+              style={[
+                styles.voiceCircleAnim,
+                { transform: [{ scale: voiceScale }] },
+              ]}
+            >
+              <Mic size={56} color="white" />
+            </Animated.View>
+            <Text style={styles.voiceStatus}>AI Listening...</Text>
+          </View>
+        </View>
+      )}
+
+      {/* Premium Bottom Navigation Tab Bar */}
+      <View style={[styles.bottomNavigation, { paddingBottom: Math.max(insets.bottom, 15) }]}>
+        <View style={styles.navBar}>
+          {/* Home Tab */}
+          <TouchableOpacity
+            style={styles.navItem}
+            activeOpacity={0.8}
+            onPress={() => setActiveTab("home")}
+          >
+            <View style={[styles.navIconBox, activeTab === "home" && styles.activeIconBox]}>
+              <Home size={26} color={activeTab === "home" ? "#10B981" : "#4B5563"} strokeWidth={activeTab === "home" ? 2.4 : 2.0} />
+            </View>
+            <Text style={[styles.navLabel, activeTab === "home" && styles.activeNavLabel]}>Home</Text>
+          </TouchableOpacity>
+
+          {/* Requests Tab */}
+          <TouchableOpacity
+            style={styles.navItem}
+            activeOpacity={0.8}
+            onPress={() => setActiveTab("requests")}
+          >
+            <View style={[styles.navIconBox, activeTab === "requests" && styles.activeIconBox]}>
+              <ClipboardList size={26} color={activeTab === "requests" ? "#10B981" : "#4B5563"} strokeWidth={activeTab === "requests" ? 2.4 : 2.0} />
+            </View>
+            <Text style={[styles.navLabel, activeTab === "requests" && styles.activeNavLabel]}>My Requests</Text>
+          </TouchableOpacity>
+
+          {/* Profile Tab */}
+          <TouchableOpacity
+            style={styles.navItem}
+            activeOpacity={0.8}
+            onPress={() => setActiveTab("profile")}
+          >
+            <View style={[styles.navIconBox, activeTab === "profile" && styles.activeIconBox]}>
+              <User size={26} color={activeTab === "profile" ? "#10B981" : "#4B5563"} strokeWidth={activeTab === "profile" ? 2.4 : 2.0} />
+            </View>
+            <Text style={[styles.navLabel, activeTab === "profile" && styles.activeNavLabel]}>Profile</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -33,27 +676,569 @@ export default function MapScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: "#F6F8F7",
   },
-  header: {
-    padding: 20,
-    backgroundColor: "#fff",
-    elevation: 4,
-  },
-  label: {
-    fontSize: 16,
-    marginBottom: 10,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    padding: 10,
-    marginBottom: 10,
-    borderRadius: 5,
-  },
-  mapPlaceholder: {
+  loaderContainer: {
     flex: 1,
-    backgroundColor: "#e0e0e0",
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: "#F6F8F7",
+  },
+  mapTabContainer: {
+    flex: 1,
+    backgroundColor: "white",
+  },
+  solidHeader: {
+    backgroundColor: "white",
+    paddingHorizontal: 20,
+    paddingBottom: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.03,
+    shadowRadius: 10,
+    elevation: 3,
+    zIndex: 30,
+  },
+  mapWrapper: {
+    flex: 1,
+    position: "relative",
+  },
+  mapLoading: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#E5E7EB",
+  },
+  loadingText: {
+    fontFamily: "DMSans_500Medium",
+    fontSize: 16,
+    color: "#374151",
+    marginTop: 12,
+  },
+  headerContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 15,
+  },
+  menuButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: "#ECFDF5",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  brandTitle: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 32,
+    color: "#065F46",
+    letterSpacing: -1,
+  },
+  profileBtn: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 3,
+    borderColor: "white",
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  profileAvatar: {
+    width: "100%",
+    height: "100%",
+  },
+  // Request Card
+  requestCardContainer: {
+    position: "absolute",
+    bottom: 110,
+    left: 20,
+    right: 20,
+    zIndex: 20,
+  },
+  requestCard: {
+    backgroundColor: "rgba(255, 255, 255, 0.96)",
+    borderRadius: 32,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.6)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  cardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  cardTitle: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 22,
+    color: "#111827",
+  },
+  inputContainer: {
+    position: "relative",
+    height: 130,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#F9FAFB",
+    marginBottom: 20,
+    overflow: "hidden",
+  },
+  textArea: {
+    flex: 1,
+    paddingTop: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 44,
+    fontSize: 18,
+    fontFamily: "DMSans_400Regular",
+    color: "#111827",
+    textAlignVertical: "top",
+  },
+  micInputButton: {
+    position: "absolute",
+    bottom: 12,
+    right: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#ECFDF5",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  myLocationFloatingButton: {
+    position: "absolute",
+    top: 20,
+    right: 20,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "white",
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+    zIndex: 20,
+  },
+  requestCta: {
+    backgroundColor: "#065F46",
+    height: 64,
+    borderRadius: 24,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 12,
+    shadowColor: "#065F46",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 15,
+    elevation: 5,
+  },
+  ctaText: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 20,
+    color: "white",
+  },
+  // Pulsing Marker Styles
+  markerContainer: {
+    width: 60,
+    height: 60,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  pulsingRing: {
+    position: "absolute",
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(34, 197, 94, 0.4)",
+  },
+  markerDot: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: "#22C55E",
+    borderWidth: 3,
+    borderColor: "white",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  markerTooltip: {
+    backgroundColor: "white",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    marginTop: 4,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  markerTooltipText: {
+    fontSize: 10,
+    fontFamily: "DMSans_700Bold",
+    color: "#374151",
+  },
+  // Tab Layouts general
+  tabContent: {
+    flex: 1,
+    paddingHorizontal: 20,
+  },
+  tabHeading: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 34,
+    color: "#111827",
+    marginBottom: 6,
+  },
+  tabSubheading: {
+    fontFamily: "DMSans_400Regular",
+    fontSize: 16,
+    color: "#6B7280",
+    marginBottom: 25,
+  },
+  tabLoader: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  // Bookings List Styles
+  listContainer: {
+    paddingBottom: 120,
+    gap: 15,
+  },
+  bookingCard: {
+    backgroundColor: "white",
+    borderRadius: 24,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  bookingCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  bookingIconBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: "#ECFDF5",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 15,
+  },
+  bookingHeaderInfo: {
+    flex: 1,
+  },
+  bookingTitle: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 18,
+    color: "#111827",
+    marginBottom: 4,
+  },
+  bookingTime: {
+    fontFamily: "DMSans_400Regular",
+    fontSize: 14,
+    color: "#6B7280",
+  },
+  statusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  statusPending: {
+    backgroundColor: "#FFFBEB",
+  },
+  statusSuccess: {
+    backgroundColor: "#ECFDF5",
+  },
+  statusText: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 11,
+    letterSpacing: 0.5,
+  },
+  statusTextPending: {
+    color: "#D97706",
+  },
+  statusTextSuccess: {
+    color: "#059669",
+  },
+  divider: {
+    height: 1,
+    backgroundColor: "#F3F4F6",
+    marginVertical: 15,
+  },
+  bookingBody: {
+    gap: 10,
+  },
+  bodyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  bodyRowText: {
+    fontFamily: "DMSans_400Regular",
+    fontSize: 14,
+    color: "#4B5563",
+  },
+  // Empty State Styles
+  emptyContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingTop: 40,
+    paddingBottom: 100,
+  },
+  emptyImage: {
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    marginBottom: 25,
+  },
+  emptyText: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 22,
+    color: "#111827",
+    marginBottom: 10,
+  },
+  emptySubtext: {
+    fontFamily: "DMSans_400Regular",
+    fontSize: 16,
+    color: "#6B7280",
+    textAlign: "center",
+    lineHeight: 24,
+    paddingHorizontal: 30,
+    marginBottom: 30,
+  },
+  emptyCta: {
+    backgroundColor: "#065F46",
+    paddingHorizontal: 24,
+    paddingVertical: 15,
+    borderRadius: 20,
+  },
+  emptyCtaText: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 16,
+    color: "white",
+  },
+  // Profile View Card
+  profileViewCard: {
+    backgroundColor: "white",
+    borderRadius: 32,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    padding: 24,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+    marginBottom: 30,
+  },
+  profileHeaderBox: {
+    alignItems: "center",
+    paddingVertical: 10,
+  },
+  profileBorder: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 3,
+    borderColor: "#065F46",
+    padding: 3,
+    backgroundColor: "white",
+    marginBottom: 15,
+  },
+  profileLargeAvatar: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 57,
+  },
+  profileName: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 24,
+    color: "#111827",
+    marginBottom: 8,
+  },
+  roleLabel: {
+    backgroundColor: "#ECFDF5",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  roleLabelText: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 12,
+    color: "#065F46",
+    letterSpacing: 0.5,
+  },
+  profileDetailsList: {
+    gap: 20,
+    paddingVertical: 10,
+  },
+  detailRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  detailLabel: {
+    fontFamily: "DMSans_500Medium",
+    fontSize: 15,
+    color: "#6B7280",
+  },
+  detailValue: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 16,
+    color: "#111827",
+  },
+  ratingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  ratingText: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 16,
+    color: "#D97706",
+  },
+  settingsSection: {
+    gap: 15,
+  },
+  signOutButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FEE2E2",
+    borderRadius: 24,
+    height: 64,
+  },
+  signOutButtonText: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 16,
+    color: "#EF4444",
+  },
+  // Voice Overlay
+  voiceOverlay: {
+    position: "absolute",
+    inset: 0,
+    backgroundColor: "rgba(1, 39, 29, 0.92)",
+    zIndex: 100,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  voiceOverlayContent: {
+    alignItems: "center",
+    paddingHorizontal: 40,
+  },
+  voiceTitle: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 26,
+    color: "white",
+    marginBottom: 8,
+  },
+  voiceSubtitle: {
+    fontFamily: "DMSans_400Regular",
+    fontSize: 16,
+    color: "#A7F3D0",
+    marginBottom: 60,
+    textAlign: "center",
+  },
+  voiceCircleAnim: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: "#10B981",
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#10B981",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.4,
+    shadowRadius: 20,
+    elevation: 15,
+    marginBottom: 40,
+  },
+  voiceStatus: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 18,
+    color: "white",
+    letterSpacing: 1,
+  },
+  // Premium Bottom Tab Bar
+  bottomNavigation: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "rgba(255, 255, 255, 0.95)",
+    borderTopWidth: 1,
+    borderTopColor: "#E5E7EB",
+    borderTopLeftRadius: 36,
+    borderTopRightRadius: 36,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 15,
+    zIndex: 30,
+  },
+  navBar: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    alignItems: "center",
+    height: 72,
+  },
+  navItem: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: width / 3.5,
+  },
+  navIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  activeIconBox: {
+    backgroundColor: "#ECFDF5",
+  },
+  navLabel: {
+    fontFamily: "DMSans_500Medium",
+    fontSize: 13,
+    color: "#4B5563",
+  },
+  activeNavLabel: {
+    color: "#10B981",
+    fontFamily: "DMSans_700Bold",
   },
 });
