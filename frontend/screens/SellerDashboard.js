@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Dimensions,
   RefreshControl,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { 
@@ -70,6 +71,13 @@ export default function SellerDashboard({ navigation }) {
 
       if (providerError || !provider) {
         console.log("No provider profile found. Loading mock data.");
+        
+        // Show high-fidelity diagnostic modal/alert to debug device state
+        Alert.alert(
+          "Karigar Diagnostic Alert",
+          `Authenticated User:\nID: ${user.id}\nPhone: ${user.phone || "N/A"}\n\nDatabase Query:\nError: ${providerError ? providerError.message : "No record found"}\nCode: ${providerError ? providerError.code : "N/A"}`
+        );
+
         loadMockData();
         setLoading(false);
         return;
