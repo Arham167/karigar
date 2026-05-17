@@ -19,8 +19,6 @@ import {
   Clock,
   Briefcase,
   CheckCircle,
-  Play,
-  Pause,
   Award,
   ThumbsUp,
   Wrench,
@@ -71,7 +69,6 @@ const DUMMY_SERVICES = [
 export default function KarigarSellerProfile({ provider, onClose, onBook, onChat }) {
   const [liked, setLiked] = useState(false);
   const [activeTab, setActiveTab] = useState("about");
-  const [playing, setPlaying] = useState(false);
 
   // Fallback data if provider object is missing (e.g. standalone test mode)
   const defaultProvider = {
@@ -175,10 +172,6 @@ export default function KarigarSellerProfile({ provider, onClose, onBook, onChat
     setLiked(!liked);
   };
 
-  const handlePlayBioPress = () => {
-    setPlaying(!playing);
-  };
-
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
@@ -271,33 +264,7 @@ export default function KarigarSellerProfile({ provider, onClose, onBook, onChat
           </View>
         </View>
 
-        {/* ── Dynamic AI Audio Bio Playback Card ── */}
-        <View style={styles.audioBioContainer}>
-          <View style={styles.audioIconBg}>
-            <Play size={18} color="#065F46" fill="#065F46" />
-          </View>
-          <View style={styles.audioTextContent}>
-            <Text style={styles.audioTitle}>Voice Introduction</Text>
-            <Text style={styles.audioSubtitle}>Listen to {displayName}'s skills & guarantee</Text>
-          </View>
-          <TouchableOpacity 
-            style={[styles.audioPlayButton, playing && styles.audioPlayButtonActive]} 
-            onPress={handlePlayBioPress}
-            activeOpacity={0.8}
-          >
-            {playing ? (
-              <>
-                <Pause size={14} color="white" fill="white" />
-                <Text style={styles.audioPlayText}>Playing...</Text>
-              </>
-            ) : (
-              <>
-                <Play size={14} color="#065F46" fill="#065F46" />
-                <Text style={[styles.audioPlayText, { color: "#065F46" }]}>Listen</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        </View>
+
 
         {/* ── Segmented Custom Tabs ── */}
         <View style={styles.tabsContainer}>
@@ -710,61 +677,6 @@ const styles = StyleSheet.create({
     fontFamily: "DMSans_700Bold",
     fontSize: 10,
     color: "#065F46",
-  },
-  // Audio Bio
-  audioBioContainer: {
-    marginHorizontal: 20,
-    marginTop: 12,
-    backgroundColor: "#E6F4EA",
-    borderWidth: 1,
-    borderColor: "#CEEBD6",
-    borderRadius: 16,
-    padding: 12,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  audioIconBg: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: "white",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 10,
-  },
-  audioTextContent: {
-    flex: 1,
-  },
-  audioTitle: {
-    fontFamily: "DMSans_700Bold",
-    fontSize: 13,
-    color: "#065F46",
-    marginBottom: 2,
-  },
-  audioSubtitle: {
-    fontFamily: "DMSans_400Regular",
-    fontSize: 10,
-    color: "#3B7A57",
-  },
-  audioPlayButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "white",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
-    gap: 4,
-    borderWidth: 1,
-    borderColor: "#B7E1C1",
-  },
-  audioPlayButtonActive: {
-    backgroundColor: "#065F46",
-    borderColor: "#065F46",
-  },
-  audioPlayText: {
-    fontFamily: "DMSans_700Bold",
-    fontSize: 11,
-    color: "white",
   },
   // Tab Buttons Layout
   tabsContainer: {

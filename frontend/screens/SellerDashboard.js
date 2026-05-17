@@ -134,7 +134,7 @@ export default function SellerDashboard({ navigation }) {
           onTime: provider.on_time_score ? `${Math.round(parseFloat(provider.on_time_score) * 20)}%` : "98%"
         });
       } else {
-        loadMockData();
+        loadMockData(provider);
       }
 
     } catch (err) {
@@ -152,12 +152,16 @@ export default function SellerDashboard({ navigation }) {
   };
 
   // Safe Mock Fallbacks for testing
-  const loadMockData = () => {
-    setProviderProfile({
-      business_name: "Bilal Plumber Services",
-      specialization: "Electrician & Plumber",
-      profile_image_url: "https://images.unsplash.com/photo-1540569014015-19a7be504e3a?q=80&w=200"
-    });
+  const loadMockData = (keepRealProfile = null) => {
+    if (keepRealProfile) {
+      setProviderProfile(keepRealProfile);
+    } else {
+      setProviderProfile({
+        business_name: "Bilal Plumber Services",
+        specialization: "Electrician & Plumber",
+        profile_image_url: "https://images.unsplash.com/photo-1540569014015-19a7be504e3a?q=80&w=200"
+      });
+    }
 
     setActiveNegotiations([
       {

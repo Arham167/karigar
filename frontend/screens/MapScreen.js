@@ -14,13 +14,14 @@ import {
   ScrollView,
   Alert,
   Modal,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import MapView, { Marker } from "react-native-maps";
 import * as Location from "expo-location";
 import {
   Menu,
-  Mic,
   ArrowRight,
   Home,
   ClipboardList,
@@ -30,7 +31,6 @@ import {
   Star,
   CheckCircle,
   Clock,
-  Volume2,
   Compass,
   AlertCircle,
   AlertTriangle,
@@ -181,9 +181,7 @@ export default function MapScreen({ navigation }) {
   const [providers, setProviders] = useState([]);
   const [loadingLocation, setLoadingLocation] = useState(true);
 
-  // Voice Interaction States
-  const [isListening, setIsListening] = useState(false);
-  const voiceScale = useRef(new Animated.Value(1)).current;
+
 
   // Scanning Animation States
   const [isScanning, setIsScanning] = useState(false);
@@ -249,27 +247,7 @@ export default function MapScreen({ navigation }) {
     }
   }, [activeTab]);
 
-  // Voice UI Pulse Animation
-  useEffect(() => {
-    if (isListening) {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(voiceScale, {
-            toValue: 1.4,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-          Animated.timing(voiceScale, {
-            toValue: 1.0,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-        ])
-      ).start();
-    } else {
-      voiceScale.setValue(1.0);
-    }
-  }, [isListening]);
+
 
   // Radar Scanning Animation
   useEffect(() => {
@@ -575,14 +553,7 @@ export default function MapScreen({ navigation }) {
     }
   };
 
-  const triggerVoiceSearch = () => {
-    setIsListening(true);
-    // Simulate speech-to-text typing out a job request
-    setTimeout(() => {
-      setJobDescription("I need an expert AC specialist to service my split unit because it's not cooling properly.");
-      setIsListening(false);
-    }, 2800);
-  };
+
 
   const handleCloseMatches = () => {
     setShowMatches(false);
@@ -893,6 +864,7 @@ export default function MapScreen({ navigation }) {
                   showsUserLocation={true}
                   showsMyLocationButton={false}
                   customMapStyle={customMapStyle}
+                  onPress={() => Keyboard.dismiss()}
                 >
                   {/* Matches Markers */}
                   {!isScanning && showMatches && matchedProviders.map((provider) => (
@@ -981,11 +953,17 @@ export default function MapScreen({ navigation }) {
             {/* Request Card Overlay */}
             {!isScanning && !showMatches && (
               <KeyboardAvoidingView
-                behavior={Platform.OS === "ios" ? "padding" : "height"}
+                behavior={Platform.OS === "ios" ? "padding" : "padding"}
                 keyboardVerticalOffset={Platform.OS === "ios" ? 140 : 0}
                 style={styles.requestCardContainer}
               >
-                <View style={styles.requestCard}>
+                <ScrollView
+                  style={[styles.requestCard, { maxHeight: 310 }]}
+                  contentContainerStyle={{ padding: 24 }}
+                  keyboardShouldPersistTaps="handled"
+                  keyboardDismissMode="on-drag"
+                  showsVerticalScrollIndicator={false}
+                >
                   <View style={styles.cardHeader}>
                     <Text style={styles.cardTitle}>Describe your job</Text>
                   </View>
@@ -999,13 +977,6 @@ export default function MapScreen({ navigation }) {
                       value={jobDescription}
                       onChangeText={setJobDescription}
                     />
-                    <TouchableOpacity
-                      style={styles.micInputButton}
-                      activeOpacity={0.8}
-                      onPress={triggerVoiceSearch}
-                    >
-                      <Mic size={24} color="#065F46" />
-                    </TouchableOpacity>
                   </View>
 
                   <TouchableOpacity
@@ -1023,7 +994,7 @@ export default function MapScreen({ navigation }) {
                       </>
                     )}
                   </TouchableOpacity>
-                </View>
+                </ScrollView>
               </KeyboardAvoidingView>
             )}
           </View>
@@ -1157,24 +1128,7 @@ export default function MapScreen({ navigation }) {
         </ScrollView>
       )}
 
-      {/* Voice Assistant Visualizer Overlay */}
-      {isListening && (
-        <View style={styles.voiceOverlay}>
-          <View style={styles.voiceOverlayContent}>
-            <Text style={styles.voiceTitle}>Speak clearly now...</Text>
-            <Text style={styles.voiceSubtitle}>"I need a plumber to fix the kitchen..."</Text>
-            <Animated.View
-              style={[
-                styles.voiceCircleAnim,
-                { transform: [{ scale: voiceScale }] },
-              ]}
-            >
-              <Mic size={56} color="white" />
-            </Animated.View>
-            <Text style={styles.voiceStatus}>AI Listening...</Text>
-          </View>
-        </View>
-      )}
+
 
       {/* Premium Bottom Navigation Tab Bar */}
       <View style={[styles.bottomNavigation, { paddingBottom: Math.max(insets.bottom, 15) }]}>
@@ -1345,7 +1299,6 @@ const styles = StyleSheet.create({
   requestCard: {
     backgroundColor: "rgba(255, 255, 255, 0.96)",
     borderRadius: 32,
-    padding: 24,
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.6)",
     shadowColor: "#000",
@@ -1378,22 +1331,11 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingTop: 16,
     paddingHorizontal: 16,
-    paddingBottom: 44,
+    paddingBottom: 16,
     fontSize: 18,
     fontFamily: "DMSans_400Regular",
     color: "#111827",
     textAlignVertical: "top",
-  },
-  micInputButton: {
-    position: "absolute",
-    bottom: 12,
-    right: 12,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#ECFDF5",
-    justifyContent: "center",
-    alignItems: "center",
   },
   myLocationFloatingButton: {
     position: "absolute",
@@ -1722,52 +1664,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#EF4444",
   },
-  // Voice Overlay
-  voiceOverlay: {
-    position: "absolute",
-    inset: 0,
-    backgroundColor: "rgba(1, 39, 29, 0.92)",
-    zIndex: 100,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  voiceOverlayContent: {
-    alignItems: "center",
-    paddingHorizontal: 40,
-  },
-  voiceTitle: {
-    fontFamily: "DMSans_700Bold",
-    fontSize: 26,
-    color: "white",
-    marginBottom: 8,
-  },
-  voiceSubtitle: {
-    fontFamily: "DMSans_400Regular",
-    fontSize: 16,
-    color: "#A7F3D0",
-    marginBottom: 60,
-    textAlign: "center",
-  },
-  voiceCircleAnim: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    backgroundColor: "#10B981",
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#10B981",
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.4,
-    shadowRadius: 20,
-    elevation: 15,
-    marginBottom: 40,
-  },
-  voiceStatus: {
-    fontFamily: "DMSans_700Bold",
-    fontSize: 18,
-    color: "white",
-    letterSpacing: 1,
-  },
+
   // Premium Bottom Tab Bar
   bottomNavigation: {
     position: "absolute",
