@@ -244,8 +244,8 @@ async function parseViaGemini(text, apiKey) {
   try {
     const { GoogleGenerativeAI } = require("@google/generative-ai");
     const genAI = new GoogleGenerativeAI(apiKey);
-    // Use gemini-1.5-flash which is lightning fast and free/low-cost
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    // Use gemini-2.5-flash which is lightning fast and free/low-cost
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     const systemPrompt = `
 You are an expert multilingual entity extractor for a local home-services app named "Karigar".
