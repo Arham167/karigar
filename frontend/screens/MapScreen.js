@@ -188,6 +188,12 @@ export default function MapScreen({ navigation }) {
   const [isScanning, setIsScanning] = useState(false);
   const radarScale = useRef(new Animated.Value(0)).current;
   const radarOpacity = useRef(new Animated.Value(1)).current;
+  const scanLineAnim = useRef(new Animated.Value(0)).current;
+
+  const translateY = scanLineAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-50, height * 0.65],
+  });
 
   // Requests List States
   const [bookings, setBookings] = useState([]);
@@ -265,16 +271,22 @@ export default function MapScreen({ navigation }) {
     if (isScanning) {
       radarScale.setValue(0);
       radarOpacity.setValue(1);
+      scanLineAnim.setValue(0);
       Animated.loop(
         Animated.parallel([
           Animated.timing(radarScale, {
             toValue: 4,
-            duration: 2000,
+            duration: 2200,
             useNativeDriver: true,
           }),
           Animated.timing(radarOpacity, {
             toValue: 0,
-            duration: 2000,
+            duration: 2200,
+            useNativeDriver: true,
+          }),
+          Animated.timing(scanLineAnim, {
+            toValue: 1,
+            duration: 2200,
             useNativeDriver: true,
           }),
         ])
@@ -282,6 +294,7 @@ export default function MapScreen({ navigation }) {
     } else {
       radarScale.setValue(0);
       radarOpacity.setValue(1);
+      scanLineAnim.setValue(0);
     }
   }, [isScanning]);
 
@@ -790,37 +803,11 @@ export default function MapScreen({ navigation }) {
                   showsMyLocationButton={false}
                   customMapStyle={customMapStyle}
                 >
-                  {/* Radar Scanning Animation */}
-                  {isScanning && (location || region) && (
-                    <Marker
-                      coordinate={{
-                        latitude: location ? location.coords.latitude : region.latitude,
-                        longitude: location ? location.coords.longitude : region.longitude,
-                      }}
-                      anchor={{ x: 0.5, y: 0.5 }}
-                    >
-                      <View style={styles.radarContainer}>
-                        <Animated.View
-                          style={[
-                            styles.radarRing,
-                            {
-                              transform: [{ scale: radarScale }],
-                              opacity: radarOpacity,
-                            },
-                          ]}
-                        />
-                        <View style={styles.radarCore} />
-                      </View>
-                    </Marker>
-                  )}
-
                   {/* Matches Markers */}
                   {!isScanning && showMatches && matchedProviders.map((provider) => (
                     <Marker
                       key={provider.id}
                       coordinate={{ latitude: provider.lat, longitude: provider.lng }}
-                      title={provider.business_name}
-                      description={`${provider.specialization} • ★${provider.base_rating}`}
                       onPress={() => handleBookProvider(provider)}
                     >
                       <View style={styles.premiumPopupMarker}>
@@ -831,7 +818,7 @@ export default function MapScreen({ navigation }) {
                             <View style={styles.popupRatingContainer}>
                               <Star size={12} color="#FBBF24" fill="#FBBF24" />
                               <Text style={styles.popupRating}>{provider.base_rating}</Text>
-                              <Text style={styles.popupDistance}> • {provider.distance ? `${provider.distance} km` : "Nearby"}</Text>
+                              <Text style={styles.popupDistance}>• {provider.distance ? `${provider.distance} km` : "Nearby"}</Text>
                             </View>
                           </View>
                         </View>
@@ -841,6 +828,50 @@ export default function MapScreen({ navigation }) {
                   ))}
                 </MapView>
 
+                {/* Absolute Full Screen Radar Sweep Scanner Overlay */}
+                {isScanning && (
+                  <View style={styles.fullScreenScannerContainer}>
+                    {/* Concentric Expanding Circular Waves */}
+                    <Animated.View
+                      style={[
+                        styles.fullScreenRadarRing,
+                        {
+                          transform: [
+                            { scale: radarScale.interpolate({ inputRange: [0, 4], outputRange: [0.1, 7] }) }
+                          ],
+                          opacity: radarOpacity,
+                        },
+                      ]}
+                    />
+                    
+                    {/* Sweeping Laser Beam Scan Line */}
+                    <Animated.View
+                      style={[
+                        styles.scanLine,
+                        {
+                          transform: [{ translateY }],
+                        },
+                      ]}
+                    />
+                  </View>
+                )}
+
+                {/* Banner to inform tap booking */}
+                {showMatches && (
+                  <View style={styles.tapToBookBannerContainer}>
+                    <View style={styles.tapToBookBanner}>
+                      <Text style={styles.tapToBookText}>
+                        📍 Tap any card on the map to book them instantly!
+                      </Text>
+                      <TouchableOpacity 
+                        style={styles.closeBannerBtn}
+                        onPress={handleCloseMatches}
+                      >
+                        <Text style={styles.closeBannerText}>✕</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
                 
                 {/* Custom My-Location Centering Button */}
                 <TouchableOpacity
@@ -854,15 +885,7 @@ export default function MapScreen({ navigation }) {
             )}
 
             {/* Request Card Overlay */}
-            {isScanning ? (
-              <View style={styles.scanningCardContainer}>
-                <View style={styles.scanningCard}>
-                  <ActivityIndicator size="large" color="#10B981" style={{ marginBottom: 16 }} />
-                  <Text style={styles.scanningTitle}>Locating Professionals...</Text>
-                  <Text style={styles.scanningSubtitle}>Scanning your area for the best {jobDescription ? "matches" : "Karigars"}</Text>
-                </View>
-              </View>
-            ) : !showMatches ? (
+            {!isScanning && !showMatches && (
               <KeyboardAvoidingView
                 behavior={Platform.OS === "ios" ? "padding" : "height"}
                 keyboardVerticalOffset={Platform.OS === "ios" ? 140 : 0}
@@ -908,57 +931,6 @@ export default function MapScreen({ navigation }) {
                   </TouchableOpacity>
                 </View>
               </KeyboardAvoidingView>
-            ) : (
-              <View style={styles.matchesCardContainer}>
-                <View style={styles.matchesCard}>
-                  <View style={styles.matchesCardHeader}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.matchesCardTitle}>Best Matches Found ✨</Text>
-                      <Text style={styles.matchesCardSubtitle} numberOfLines={1}>
-                        5 professionals found for {matchedService} in {matchedLocation}
-                      </Text>
-                    </View>
-                    <TouchableOpacity 
-                      style={styles.closeMatchesBtn} 
-                      onPress={handleCloseMatches}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.closeMatchesText}>✕</Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  <ScrollView 
-                    horizontal 
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.matchesScrollContent}
-                  >
-                    {matchedProviders.map((provider) => (
-                      <TouchableOpacity 
-                        key={provider.id} 
-                        style={styles.miniProviderCard}
-                        onPress={() => handleBookProvider(provider)}
-                        activeOpacity={0.9}
-                      >
-                        <Image source={{ uri: provider.profile_image_url }} style={styles.miniAvatar} />
-                        <Text style={styles.miniName} numberOfLines={1}>{provider.business_name.split(' (')[0]}</Text>
-                        <View style={styles.miniRatingRow}>
-                          <Star size={12} color="#FBBF24" fill="#FBBF24" />
-                          <Text style={styles.miniRatingText}>{provider.base_rating}</Text>
-                        </View>
-                        <Text style={styles.miniDistance}>{provider.distance ? `${provider.distance} km away` : "Nearby"}</Text>
-                        
-                        <TouchableOpacity 
-                          style={styles.miniBookBtn}
-                          onPress={() => handleBookProvider(provider)}
-                          activeOpacity={0.8}
-                        >
-                          <Text style={styles.miniBookText}>Book Now</Text>
-                        </TouchableOpacity>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-              </View>
             )}
           </View>
         </View>
@@ -1809,173 +1781,34 @@ const styles = StyleSheet.create({
     color: "#4B5563",
   },
   // Radar Animation Styles
-  radarContainer: {
-    width: 100,
-    height: 100,
+  fullScreenScannerContainer: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(6, 95, 70, 0.08)",
     justifyContent: "center",
     alignItems: "center",
+    overflow: "hidden",
   },
-  radarRing: {
+  fullScreenRadarRing: {
     position: "absolute",
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(16, 185, 129, 0.35)",
-    borderWidth: 1,
-    borderColor: "rgba(16, 185, 129, 0.7)",
-  },
-  radarCore: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: "#10B981",
-    borderWidth: 3,
-    borderColor: "white",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    elevation: 6,
-  },
-  scanningCardContainer: {
-    position: "absolute",
-    bottom: 110,
-    left: 20,
-    right: 20,
-    zIndex: 20,
-  },
-  scanningCard: {
-    backgroundColor: "rgba(255, 255, 255, 0.98)",
-    borderRadius: 32,
-    padding: 30,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "rgba(16, 185, 129, 0.3)",
-    shadowColor: "#10B981",
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  scanningTitle: {
-    fontFamily: "DMSans_700Bold",
-    fontSize: 20,
-    color: "#065F46",
-    marginBottom: 6,
-  },
-  scanningSubtitle: {
-    fontFamily: "DMSans_500Medium",
-    fontSize: 14,
-    color: "#6B7280",
-    textAlign: "center",
-  },
-  // Matches Popup Card Overlay Styles
-  matchesCardContainer: {
-    position: "absolute",
-    bottom: 110,
-    left: 20,
-    right: 20,
-    zIndex: 20,
-  },
-  matchesCard: {
-    backgroundColor: "rgba(255, 255, 255, 0.97)",
-    borderRadius: 32,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.6)",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.15,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  matchesCardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-    paddingHorizontal: 4,
-  },
-  matchesCardTitle: {
-    fontFamily: "DMSans_700Bold",
-    fontSize: 20,
-    color: "#111827",
-  },
-  matchesCardSubtitle: {
-    fontFamily: "DMSans_500Medium",
-    fontSize: 13,
-    color: "#6B7280",
-    marginTop: 2,
-  },
-  closeMatchesBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#F3F4F6",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  closeMatchesText: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "#4B5563",
-  },
-  matchesScrollContent: {
-    gap: 12,
-    paddingRight: 10,
-  },
-  miniProviderCard: {
-    backgroundColor: "#F9FAFB",
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    padding: 16,
     width: 140,
-    alignItems: "center",
+    height: 140,
+    borderRadius: 70,
+    borderWidth: 2.5,
+    borderColor: "#10B981",
+    backgroundColor: "rgba(16, 185, 129, 0.05)",
   },
-  miniAvatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "#E5E7EB",
-    marginBottom: 8,
-  },
-  miniName: {
-    fontFamily: "DMSans_700Bold",
-    fontSize: 13,
-    color: "#111827",
-    textAlign: "center",
-  },
-  miniRatingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    marginTop: 4,
-  },
-  miniRatingText: {
-    fontFamily: "DMSans_700Bold",
-    fontSize: 12,
-    color: "#374151",
-  },
-  miniDistance: {
-    fontFamily: "DMSans_500Medium",
-    fontSize: 11,
-    color: "#6B7280",
-    marginTop: 2,
-    marginBottom: 8,
-  },
-  miniBookBtn: {
-    backgroundColor: "#065F46",
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    width: "100%",
-    alignItems: "center",
-  },
-  miniBookText: {
-    fontFamily: "DMSans_700Bold",
-    fontSize: 12,
-    color: "white",
+  scanLine: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    height: 6,
+    backgroundColor: "#10B981",
+    opacity: 0.85,
+    shadowColor: "#10B981",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.6,
+    shadowRadius: 12,
+    elevation: 8,
   },
   // Custom Map popup styles
   premiumPopupMarker: {
@@ -1985,61 +1818,105 @@ const styles = StyleSheet.create({
   popupCard: {
     flexDirection: "row",
     backgroundColor: "white",
-    borderRadius: 18,
-    padding: 8,
+    borderRadius: 16,
+    padding: 10,
     alignItems: "center",
-    borderWidth: 1.5,
-    borderColor: "#10B981",
+    borderWidth: 2,
+    borderColor: "#065F46",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.15,
-    shadowRadius: 8,
+    shadowRadius: 10,
     elevation: 8,
-    maxWidth: 180,
+    width: 165,
   },
   popupImage: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    marginRight: 6,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    marginRight: 8,
     backgroundColor: "#E5E7EB",
   },
   popupInfo: {
     flex: 1,
+    justifyContent: "center",
   },
   popupName: {
     fontFamily: "DMSans_700Bold",
-    fontSize: 12,
+    fontSize: 13,
     color: "#111827",
+    marginBottom: 2,
   },
   popupRatingContainer: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 1,
   },
   popupRating: {
     fontFamily: "DMSans_700Bold",
-    fontSize: 10,
-    color: "#374151",
-    marginLeft: 2,
+    fontSize: 11,
+    color: "#D97706",
+    marginLeft: 3,
   },
   popupDistance: {
     fontFamily: "DMSans_500Medium",
-    fontSize: 9,
+    fontSize: 10,
     color: "#6B7280",
+    marginLeft: 4,
   },
   popupArrow: {
     width: 0,
     height: 0,
     backgroundColor: "transparent",
     borderStyle: "solid",
-    borderLeftWidth: 6,
-    borderRightWidth: 6,
-    borderTopWidth: 6,
+    borderLeftWidth: 8,
+    borderRightWidth: 8,
+    borderTopWidth: 8,
     borderLeftColor: "transparent",
     borderRightColor: "transparent",
-    borderTopColor: "#10B981",
+    borderTopColor: "#065F46",
     alignSelf: "center",
-    marginTop: -1,
+    marginTop: -2,
+  },
+  // Tap to Book Banner styles
+  tapToBookBannerContainer: {
+    position: "absolute",
+    top: 20,
+    left: 20,
+    right: 20,
+    zIndex: 20,
+  },
+  tapToBookBanner: {
+    flexDirection: "row",
+    backgroundColor: "rgba(6, 95, 70, 0.95)",
+    borderRadius: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: "center",
+    justifyContent: "space-between",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  tapToBookText: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 13,
+    color: "white",
+    flex: 1,
+  },
+  closeBannerBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: 10,
+  },
+  closeBannerText: {
+    color: "white",
+    fontSize: 11,
+    fontWeight: "bold",
   },
 });
