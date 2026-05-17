@@ -13,6 +13,7 @@ import {
   KeyboardAvoidingView,
   ScrollView,
   Alert,
+  Modal,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import MapView, { Marker } from "react-native-maps";
@@ -31,6 +32,10 @@ import {
   Clock,
   Volume2,
   Compass,
+  AlertCircle,
+  AlertTriangle,
+  HelpCircle,
+  Wrench,
 } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { supabase } from "../utils/supabase";
@@ -176,6 +181,38 @@ export default function MapScreen({ navigation }) {
   const [bookings, setBookings] = useState([]);
   const [loadingBookings, setLoadingBookings] = useState(false);
 
+  // Custom Alert Popup State
+  const [customAlert, setCustomAlert] = useState({
+    visible: false,
+    title: "",
+    message: "",
+    icon: "info", // "success" | "error" | "warning" | "info" | "question" | "details"
+    buttons: [],
+  });
+
+  const showCustomAlert = (title, message, buttons = null, icon = "info") => {
+    setCustomAlert({
+      visible: true,
+      title,
+      message,
+      icon,
+      buttons: buttons || [{ text: "OK", onPress: () => {} }],
+    });
+  };
+
+  const closeCustomAlert = () => {
+    setCustomAlert(prev => ({ ...prev, visible: false }));
+  };
+
+  const handleAlertButtonPress = (onPress) => {
+    closeCustomAlert();
+    if (onPress) {
+      setTimeout(() => {
+        onPress();
+      }, 100);
+    }
+  };
+
   // Load Profile and Location on Mount
   useEffect(() => {
     loadUserProfile();
@@ -237,9 +274,11 @@ export default function MapScreen({ navigation }) {
       setLoadingLocation(true);
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert(
+        showCustomAlert(
           "Location Permission Denied",
-          "We will use a default location. To see professionals near you, please enable location permissions in settings."
+          "We will use a default location. To see professionals near you, please enable location permissions in settings.",
+          [{ text: "OK", onPress: () => {} }],
+          "warning"
         );
         setLoadingLocation(false);
         return;
@@ -279,7 +318,12 @@ export default function MapScreen({ navigation }) {
       }
     } catch (error) {
       console.log("Error centering location:", error);
-      Alert.alert("Location Error", "Could not fetch your current coordinates. Please ensure GPS is enabled.");
+      showCustomAlert(
+        "Location Error", 
+        "Could not fetch your current coordinates. Please ensure GPS is enabled.",
+        [{ text: "OK", onPress: () => {} }],
+        "error"
+      );
     }
   };
 
@@ -306,7 +350,12 @@ export default function MapScreen({ navigation }) {
 
   const handleRequestKarigar = async () => {
     if (!jobDescription.trim()) {
-      Alert.alert("Request Details Required", "Please describe what service you need before continuing.");
+      showCustomAlert(
+        "Request Details Required", 
+        "Please describe what service you need before continuing.",
+        [{ text: "Got It", onPress: () => {} }],
+        "warning"
+      );
       return;
     }
 
@@ -314,8 +363,12 @@ export default function MapScreen({ navigation }) {
     try {
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       if (userError || !user) {
-        Alert.alert("Session Expired", "Please log in again.");
-        navigation.navigate("Auth");
+        showCustomAlert(
+          "Session Expired", 
+          "Please log in again.",
+          [{ text: "Log In", onPress: () => navigation.navigate("Auth") }],
+          "error"
+        );
         return;
       }
 
@@ -356,10 +409,11 @@ export default function MapScreen({ navigation }) {
       }
 
       if (missingDetails.length > 0) {
-        Alert.alert(
+        showCustomAlert(
           "Details Required 🛠️",
           `To match you with the best Karigar, please specify the following in your request:\n\n${missingDetails.map(detail => `• ${detail}`).join("\n")}\n\nExample: "I need a plumber at 5 PM in Gulshan."`,
-          [{ text: "Edit Request", style: "cancel" }]
+          [{ text: "Edit Request", style: "cancel", onPress: () => {} }],
+          "details"
         );
         setIsSubmitting(false);
         return;
@@ -379,16 +433,22 @@ export default function MapScreen({ navigation }) {
 
       if (error) throw error;
 
-      Alert.alert(
+      showCustomAlert(
         "Job Requested Successfully! 🎉",
         `Your request for ${service.value} at ${parsedLocation.value} for ${time.value} has been parsed & posted. Nearby Karigars are being notified!`,
         [{ text: "Awesome", onPress: () => {
           setJobDescription("");
           setActiveTab("requests");
-        }}]
+        }}],
+        "success"
       );
     } catch (error) {
-      Alert.alert("Error placing request", error.message);
+      showCustomAlert(
+        "Error placing request", 
+        error.message,
+        [{ text: "OK", onPress: () => {} }],
+        "error"
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -404,21 +464,122 @@ export default function MapScreen({ navigation }) {
   };
 
   const handleSignOut = async () => {
-    Alert.alert("Sign Out", "Are you sure you want to sign out?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Sign Out",
-        style: "destructive",
-        onPress: async () => {
-          await supabase.auth.signOut();
-          useAuthStore.getState().clearAuth();
-          navigation.reset({
-            index: 0,
-            routes: [{ name: "Auth" }],
-          });
+    showCustomAlert(
+      "Sign Out",
+      "Are you sure you want to sign out?",
+      [
+        { text: "Cancel", style: "cancel", onPress: () => {} },
+        {
+          text: "Sign Out",
+          style: "destructive",
+          onPress: async () => {
+            await supabase.auth.signOut();
+            useAuthStore.getState().clearAuth();
+            navigation.reset({
+              index: 0,
+              routes: [{ name: "Auth" }],
+            });
+          },
         },
-      },
-    ]);
+      ],
+      "question"
+    );
+  };
+
+  // Custom Alert Modal JSX
+  const CustomAlertModal = () => {
+    if (!customAlert.visible) return null;
+
+    const renderAlertIcon = () => {
+      switch (customAlert.icon) {
+        case "success":
+          return (
+            <View style={[styles.alertIconWrapper, { backgroundColor: "#ECFDF5" }]}>
+              <CheckCircle size={38} color="#10B981" />
+            </View>
+          );
+        case "error":
+          return (
+            <View style={[styles.alertIconWrapper, { backgroundColor: "#FEF2F2" }]}>
+              <AlertCircle size={38} color="#EF4444" />
+            </View>
+          );
+        case "warning":
+          return (
+            <View style={[styles.alertIconWrapper, { backgroundColor: "#FFFBEB" }]}>
+              <AlertTriangle size={38} color="#FBBF24" />
+            </View>
+          );
+        case "details":
+          return (
+            <View style={[styles.alertIconWrapper, { backgroundColor: "#ECFDF5" }]}>
+              <Wrench size={38} color="#065F46" />
+            </View>
+          );
+        case "question":
+          return (
+            <View style={[styles.alertIconWrapper, { backgroundColor: "#F3F4F6" }]}>
+              <HelpCircle size={38} color="#4B5563" />
+            </View>
+          );
+        case "info":
+        default:
+          return (
+            <View style={[styles.alertIconWrapper, { backgroundColor: "#EFF6FF" }]}>
+              <AlertCircle size={38} color="#3B82F6" />
+            </View>
+          );
+      }
+    };
+
+    return (
+      <Modal
+        transparent={true}
+        visible={customAlert.visible}
+        animationType="fade"
+        onRequestClose={closeCustomAlert}
+      >
+        <View style={styles.alertOverlay}>
+          <View style={styles.alertContainer}>
+            {renderAlertIcon()}
+            <Text style={styles.alertTitle}>{customAlert.title}</Text>
+            <Text style={styles.alertMessage}>{customAlert.message}</Text>
+            
+            <View style={styles.alertButtonsContainer}>
+              {customAlert.buttons.map((btn, index) => {
+                const isDestructive = btn.style === "destructive";
+                const isCancel = btn.style === "cancel" || btn.style === "secondary";
+                
+                let btnStyle = styles.alertButtonPrimary;
+                let btnTextStyle = styles.alertButtonTextPrimary;
+                
+                if (isDestructive) {
+                  btnStyle = styles.alertButtonDestructive;
+                  btnTextStyle = styles.alertButtonTextPrimary;
+                } else if (isCancel) {
+                  btnStyle = styles.alertButtonCancel;
+                  btnTextStyle = styles.alertButtonTextCancel;
+                }
+                
+                return (
+                  <TouchableOpacity
+                    key={index}
+                    style={[
+                      btnStyle,
+                      customAlert.buttons.length === 2 ? { flex: 1 } : { width: "100%" }
+                    ]}
+                    onPress={() => handleAlertButtonPress(btn.onPress)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={btnTextStyle}>{btn.text}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
   };
 
   if (!fontsLoaded) {
@@ -719,6 +880,9 @@ export default function MapScreen({ navigation }) {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Custom Premium Alert Popups */}
+      <CustomAlertModal />
     </View>
   );
 }
@@ -1290,5 +1454,88 @@ const styles = StyleSheet.create({
   activeNavLabel: {
     color: "#10B981",
     fontFamily: "DMSans_700Bold",
+  },
+  // Custom Alert Styles
+  alertOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(17, 24, 39, 0.7)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  alertContainer: {
+    backgroundColor: "white",
+    borderRadius: 32,
+    width: "100%",
+    maxWidth: 340,
+    padding: 24,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 15,
+    elevation: 8,
+  },
+  alertIconWrapper: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  alertTitle: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 20,
+    color: "#111827",
+    textAlign: "center",
+    marginBottom: 10,
+  },
+  alertMessage: {
+    fontFamily: "DMSans_400Regular",
+    fontSize: 14,
+    color: "#4B5563",
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  alertButtonsContainer: {
+    flexDirection: "row",
+    gap: 12,
+    width: "100%",
+    justifyContent: "center",
+  },
+  alertButtonPrimary: {
+    backgroundColor: "#065F46",
+    height: 52,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  alertButtonTextPrimary: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 15,
+    color: "white",
+  },
+  alertButtonDestructive: {
+    backgroundColor: "#EF4444",
+    height: 52,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  alertButtonCancel: {
+    backgroundColor: "#F3F4F6",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    height: 52,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  alertButtonTextCancel: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 15,
+    color: "#4B5563",
   },
 });

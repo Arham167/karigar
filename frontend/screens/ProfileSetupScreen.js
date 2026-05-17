@@ -10,6 +10,7 @@ import {
   Platform,
   Image,
   ActivityIndicator,
+  Modal,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path, Rect, Circle, Polyline, G } from "react-native-svg";
@@ -87,6 +88,38 @@ export default function ProfileSetupScreen({ navigation, route }) {
   const [image, setImage] = useState(null);
   const [loading, setLoading] = useState(false);
 
+  // Custom Alert Popup State
+  const [customAlert, setCustomAlert] = useState({
+    visible: false,
+    title: "",
+    message: "",
+    icon: "info", // "success" | "error" | "warning" | "info"
+    buttons: [],
+  });
+
+  const showCustomAlert = (title, message, buttons = null, icon = "info") => {
+    setCustomAlert({
+      visible: true,
+      title,
+      message,
+      icon,
+      buttons: buttons || [{ text: "OK", onPress: () => {} }],
+    });
+  };
+
+  const closeCustomAlert = () => {
+    setCustomAlert(prev => ({ ...prev, visible: false }));
+  };
+
+  const handleAlertButtonPress = (onPress) => {
+    closeCustomAlert();
+    if (onPress) {
+      setTimeout(() => {
+        onPress();
+      }, 100);
+    }
+  };
+
   const formatCNIC = (text) => {
     const cleaned = text.replace(/\D/g, "");
     let formatted = cleaned;
@@ -114,7 +147,12 @@ export default function ProfileSetupScreen({ navigation, route }) {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        alert('Permission to access gallery is required!');
+        showCustomAlert(
+          "Permission Required", 
+          "Permission to access gallery is required to select a profile photo!", 
+          [{ text: "OK", onPress: () => {} }], 
+          "warning"
+        );
         return;
       }
 
@@ -129,7 +167,12 @@ export default function ProfileSetupScreen({ navigation, route }) {
         setImage(result.assets[0].uri);
       }
     } catch (error) {
-      alert("Error picking image: " + error.message);
+      showCustomAlert(
+        "Image Selection Error", 
+        "Error picking image: " + error.message, 
+        [{ text: "OK", onPress: () => {} }], 
+        "error"
+      );
     }
   };
 
@@ -181,13 +224,22 @@ export default function ProfileSetupScreen({ navigation, route }) {
 
   const handleComplete = async () => {
     if (!fullName.trim() || !cnic.trim()) {
-      alert("Full Name and CNIC are required.");
+      showCustomAlert(
+        "Required Fields", 
+        "Full Name and CNIC are required to complete your profile.", 
+        [{ text: "Understood", onPress: () => {} }], 
+        "warning"
+      );
       return;
     }
 
     if (!phoneNumber) {
-      alert("Session expired. Please sign up again.");
-      navigation.navigate("Signup");
+      showCustomAlert(
+        "Session Expired", 
+        "Please sign up again to complete your registration.", 
+        [{ text: "Sign Up", onPress: () => navigation.navigate("Signup") }], 
+        "error"
+      );
       return;
     }
 
@@ -231,10 +283,127 @@ export default function ProfileSetupScreen({ navigation, route }) {
 
       navigation.navigate(role === "buyer" ? "Map" : "SellerDashboard");
     } catch (error) {
-      alert("Error saving profile: " + error.message);
+      showCustomAlert(
+        "Save Failed", 
+        "Error saving profile: " + error.message, 
+        [{ text: "OK", onPress: () => {} }], 
+        "error"
+      );
     } finally {
       setLoading(false);
     }
+  };
+
+  // Custom Alert Modal JSX
+  const CustomAlertModal = () => {
+    if (!customAlert.visible) return null;
+
+    const AlertIconSuccess = () => (
+      <Svg width={40} height={40} viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+        <Path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+        <Polyline points="22 4 12 14.01 9 11.01" />
+      </Svg>
+    );
+
+    const AlertIconError = () => (
+      <Svg width={40} height={40} viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+        <Circle cx="12" cy="12" r="10" />
+        <Path d="m15 9-6 6M9 9l6 6" />
+      </Svg>
+    );
+
+    const AlertIconWarning = () => (
+      <Svg width={40} height={40} viewBox="0 0 24 24" fill="none" stroke="#FBBF24" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+        <Path d="m10.29 3.86 8 18a2 2 0 0 1-1.79 2.74H3.5a2 2 0 0 1-1.79-2.74l8-18a2 2 0 0 1 3.58 0z" />
+        <Path d="M12 9v4M12 17h.01" />
+      </Svg>
+    );
+
+    const AlertIconInfo = () => (
+      <Svg width={40} height={40} viewBox="0 0 24 24" fill="none" stroke="#3B82F6" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+        <Circle cx="12" cy="12" r="10" />
+        <Path d="M12 16v-4M12 8h.01" />
+      </Svg>
+    );
+
+    const renderAlertIcon = () => {
+      switch (customAlert.icon) {
+        case "success":
+          return (
+            <View style={[styles.alertIconWrapper, { backgroundColor: "#ECFDF5" }]}>
+              <AlertIconSuccess />
+            </View>
+          );
+        case "error":
+          return (
+            <View style={[styles.alertIconWrapper, { backgroundColor: "#FEF2F2" }]}>
+              <AlertIconError />
+            </View>
+          );
+        case "warning":
+          return (
+            <View style={[styles.alertIconWrapper, { backgroundColor: "#FFFBEB" }]}>
+              <AlertIconWarning />
+            </View>
+          );
+        case "info":
+        default:
+          return (
+            <View style={[styles.alertIconWrapper, { backgroundColor: "#EFF6FF" }]}>
+              <AlertIconInfo />
+            </View>
+          );
+      }
+    };
+
+    return (
+      <Modal
+        transparent={true}
+        visible={customAlert.visible}
+        animationType="fade"
+        onRequestClose={closeCustomAlert}
+      >
+        <View style={styles.alertOverlay}>
+          <View style={styles.alertContainer}>
+            {renderAlertIcon()}
+            <Text style={styles.alertTitle}>{customAlert.title}</Text>
+            <Text style={styles.alertMessage}>{customAlert.message}</Text>
+            
+            <View style={styles.alertButtonsContainer}>
+              {customAlert.buttons.map((btn, index) => {
+                const isDestructive = btn.style === "destructive";
+                const isCancel = btn.style === "cancel" || btn.style === "secondary";
+                
+                let btnStyle = styles.alertButtonPrimary;
+                let btnTextStyle = styles.alertButtonTextPrimary;
+                
+                if (isDestructive) {
+                  btnStyle = styles.alertButtonDestructive;
+                  btnTextStyle = styles.alertButtonTextPrimary;
+                } else if (isCancel) {
+                  btnStyle = styles.alertButtonCancel;
+                  btnTextStyle = styles.alertButtonTextCancel;
+                }
+                
+                return (
+                  <TouchableOpacity
+                    key={index}
+                    style={[
+                      btnStyle,
+                      customAlert.buttons.length === 2 ? { flex: 1 } : { width: "100%" }
+                    ]}
+                    onPress={() => handleAlertButtonPress(btn.onPress)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={btnTextStyle}>{btn.text}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
   };
 
   if (!fontsLoaded) return null;
@@ -425,6 +594,9 @@ export default function ProfileSetupScreen({ navigation, route }) {
           )}
         </TouchableOpacity>
       </View>
+
+      {/* Custom Premium Alert Popups */}
+      <CustomAlertModal />
     </View>
   );
 }
@@ -705,5 +877,88 @@ const styles = StyleSheet.create({
     fontFamily: "DMSans_700Bold",
     fontSize: 24,
     color: "white",
+  },
+  // Custom Alert Styles
+  alertOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(17, 24, 39, 0.7)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  alertContainer: {
+    backgroundColor: "white",
+    borderRadius: 32,
+    width: "100%",
+    maxWidth: 340,
+    padding: 24,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 15,
+    elevation: 8,
+  },
+  alertIconWrapper: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  alertTitle: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 20,
+    color: "#111827",
+    textAlign: "center",
+    marginBottom: 10,
+  },
+  alertMessage: {
+    fontFamily: "DMSans_400Regular",
+    fontSize: 14,
+    color: "#4B5563",
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  alertButtonsContainer: {
+    flexDirection: "row",
+    gap: 12,
+    width: "100%",
+    justifyContent: "center",
+  },
+  alertButtonPrimary: {
+    backgroundColor: "#065F46",
+    height: 52,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  alertButtonTextPrimary: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 15,
+    color: "white",
+  },
+  alertButtonDestructive: {
+    backgroundColor: "#EF4444",
+    height: 52,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  alertButtonCancel: {
+    backgroundColor: "#F3F4F6",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    height: 52,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  alertButtonTextCancel: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 15,
+    color: "#4B5563",
   },
 });
