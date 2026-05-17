@@ -43,6 +43,42 @@ exports.matchProviders = async (req, res) => {
       longitude
     });
 
+    let searchLat = parseFloat(latitude);
+    let searchLng = parseFloat(longitude);
+
+    // Resolve specific Karachi area coordinates if parsed from the NLP request
+    if (location && typeof location === "string") {
+      const normalizedLoc = location.toLowerCase().replace(/[^a-z0-9]/g, "");
+      
+      const KARACHI_AREAS = {
+        nazimabad: { lat: 24.9180, lng: 67.0280 },
+        northnazimabad: { lat: 24.9450, lng: 67.0350 },
+        gulshan: { lat: 24.9200, lng: 67.0900 },
+        gulshaneiqbal: { lat: 24.9200, lng: 67.0900 },
+        johar: { lat: 24.9100, lng: 67.1250 },
+        gulistanejohar: { lat: 24.9100, lng: 67.1250 },
+        clifton: { lat: 24.8150, lng: 67.0330 },
+        defence: { lat: 24.8250, lng: 67.0600 },
+        dha: { lat: 24.8250, lng: 67.0600 },
+        saddar: { lat: 24.8600, lng: 67.0100 },
+        fbarea: { lat: 24.9350, lng: 67.0750 },
+        federalbarea: { lat: 24.9350, lng: 67.0750 },
+        bahria: { lat: 24.9850, lng: 67.2900 },
+        bahriatown: { lat: 24.9850, lng: 67.2900 },
+        korangi: { lat: 24.8450, lng: 67.1350 },
+        gulberg: { lat: 24.9300, lng: 67.0800 }
+      };
+
+      for (const [key, coords] of Object.entries(KARACHI_AREAS)) {
+        if (normalizedLoc.includes(key) || key.includes(normalizedLoc)) {
+          console.log(`[Matching Engine] Overriding matching reference point to "${location}" coordinates:`, coords);
+          searchLat = coords.lat;
+          searchLng = coords.lng;
+          break;
+        }
+      }
+    }
+
     if (!service) {
       return res.status(400).json({
         success: false,
@@ -130,10 +166,10 @@ exports.matchProviders = async (req, res) => {
       // 4. Calculate distances and assign standard field names
       matchingProviders = matchingProviders.map(provider => {
         let distance = null;
-        if (latitude && longitude && provider.lat && provider.lng) {
+        if (searchLat && searchLng && provider.lat && provider.lng) {
           distance = calculateDistance(
-            parseFloat(latitude),
-            parseFloat(longitude),
+            parseFloat(searchLat),
+            parseFloat(searchLng),
             parseFloat(provider.lat),
             parseFloat(provider.lng)
           );
@@ -198,8 +234,8 @@ exports.matchProviders = async (req, res) => {
 
       const ratings = [4.8, 4.7, 4.9, 4.6, 4.5];
 
-      const baseLat = parseFloat(latitude) || 24.8607;
-      const baseLng = parseFloat(longitude) || 67.0011;
+      const baseLat = parseFloat(searchLat) || 24.8607;
+      const baseLng = parseFloat(searchLng) || 67.0011;
 
       // Coordinate offsets to scatter pins realistically on the map
       const offsets = [
