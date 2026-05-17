@@ -19,6 +19,42 @@ function deg2rad(deg) {
   return deg * (Math.PI / 180);
 }
 
+// Geocode address strings into coordinates in Karachi if direct coordinates are missing in DB
+function geocodeAddress(address) {
+  if (!address || typeof address !== "string") {
+    return { lat: 24.8607, lng: 67.0011 };
+  }
+  
+  const normalized = address.toLowerCase().replace(/[^a-z0-9]/g, "");
+  
+  const KARACHI_COORDS = {
+    northnazimabad: { lat: 24.9450, lng: 67.0350 },
+    nazimabad: { lat: 24.9180, lng: 67.0280 },
+    gulshaneiqbal: { lat: 24.9200, lng: 67.0900 },
+    gulshan: { lat: 24.9200, lng: 67.0900 },
+    johar: { lat: 24.9100, lng: 67.1250 },
+    gulistanejohar: { lat: 24.9100, lng: 67.1250 },
+    clifton: { lat: 24.8150, lng: 67.0330 },
+    defence: { lat: 24.8250, lng: 67.0600 },
+    dha: { lat: 24.8250, lng: 67.0600 },
+    saddar: { lat: 24.8600, lng: 67.0100 },
+    fbarea: { lat: 24.9350, lng: 67.0750 },
+    federalbarea: { lat: 24.9350, lng: 67.0750 },
+    bahria: { lat: 24.9850, lng: 67.2900 },
+    bahriatown: { lat: 24.9850, lng: 67.2900 },
+    korangi: { lat: 24.8450, lng: 67.1350 },
+    gulberg: { lat: 24.9300, lng: 67.0800 }
+  };
+  
+  for (const [key, coords] of Object.entries(KARACHI_COORDS)) {
+    if (normalized.includes(key)) {
+      return coords;
+    }
+  }
+  
+  return { lat: 24.8607, lng: 67.0011 };
+}
+
 /**
  * POST /api/providers/match
  * Body: {
@@ -86,16 +122,20 @@ exports.matchProviders = async (req, res) => {
       });
     }
 
-    // 1. Fetch all providers and their offered services
-    const { data: dbProviders, error: dbError } = await supabase
-      .from("providers")
-      .select(`
-        *,
-        provider_services (
-          service_type,
-          base_rate
-        )
-      `);
+    // 1. Fetch all providers from the database (handling fallback if provider_services relation is missing)
+    let dbProviders = [];
+    let dbError = null;
+
+    try {
+      const { data, error } = await supabase
+        .from("providers")
+        .select("*");
+      dbProviders = data || [];
+      dbError = error;
+    } catch (err) {
+      dbError = err;
+      console.error("[Matching Engine] Exception while querying Supabase:", err);
+    }
 
     if (dbError) {
       console.error("[Matching Engine] Error fetching providers from Supabase:", dbError);
@@ -110,16 +150,10 @@ exports.matchProviders = async (req, res) => {
       matchingProviders = dbProviders.filter(provider => {
         const hasMatchingSpec = provider.specialization && 
           provider.specialization.toLowerCase().includes(service.toLowerCase());
-
-        const hasMatchingService = provider.provider_services && 
-          provider.provider_services.some(ps => 
-            ps.service_type.toLowerCase().includes(service.toLowerCase())
-          );
-
-        return hasMatchingSpec || hasMatchingService;
+        return hasMatchingSpec;
       });
 
-      console.log(`[Matching Engine] ${matchingProviders.length} providers offer service: ${service}`);
+      console.log(`[Matching Engine] ${matchingProviders.length} database providers match specialization: ${service}`);
 
       // If no providers offer this service, fall back to showing other top providers so the map is never empty
       if (matchingProviders.length === 0) {
@@ -165,13 +199,17 @@ exports.matchProviders = async (req, res) => {
 
       // 4. Calculate distances and assign standard field names
       matchingProviders = matchingProviders.map(provider => {
+        const coords = geocodeAddress(provider.shop_address);
+        const pLat = parseFloat(provider.lat || coords.lat);
+        const pLng = parseFloat(provider.lng || coords.lng);
+
         let distance = null;
-        if (searchLat && searchLng && provider.lat && provider.lng) {
+        if (searchLat && searchLng && pLat && pLng) {
           distance = calculateDistance(
             parseFloat(searchLat),
             parseFloat(searchLng),
-            parseFloat(provider.lat),
-            parseFloat(provider.lng)
+            pLat,
+            pLng
           );
         }
 
@@ -180,10 +218,10 @@ exports.matchProviders = async (req, res) => {
           business_name: provider.business_name || "Professional Karigar",
           specialization: provider.specialization || service,
           profile_image_url: provider.profile_image_url || "https://images.unsplash.com/photo-1540569014015-19a7be504e3a?q=80&w=200",
-          base_rating: parseFloat(provider.base_rating || 5.0),
-          lat: parseFloat(provider.lat),
-          lng: parseFloat(provider.lng),
-          location: provider.location || "Karachi",
+          base_rating: parseFloat(provider.base_rating || 4.8),
+          lat: pLat,
+          lng: pLng,
+          location: provider.shop_address || "Karachi",
           distance: distance,
           available: provider.available !== undefined ? provider.available : true
         };
