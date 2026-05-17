@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -24,11 +24,14 @@ import {
   Award,
   ThumbsUp,
   Wrench,
+  ShieldCheck,
+  Calendar,
 } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import { supabase } from "../utils/supabase";
 
 const { width: SCREEN_W } = Dimensions.get("window");
-const HERO_HEIGHT = 280;
+const HERO_HEIGHT = 240; // Shorter banner to make content fit on screen without scrolling
 
 // Standard premium dummy reviews for Karigars
 const DUMMY_REVIEWS = [
@@ -71,13 +74,14 @@ export default function KarigarSellerProfile({ provider, onClose, onBook }) {
 
   // Fallback data if provider object is missing (e.g. standalone test mode)
   const defaultProvider = {
-    business_name: "Ahmed Hassan (Electrician)",
-    specialization: "Electrician",
+    business_name: "Bilal Plumber (Plumber)",
+    specialization: "Plumber",
     profile_image_url: "https://images.unsplash.com/photo-1540569014015-19a7be504e3a?q=80&w=200",
-    base_rating: 4.9,
+    base_rating: 4.8,
     location: "Gulshan-e-Iqbal, Karachi",
-    distance: 0.8,
+    distance: 3.08,
     available: true,
+    on_time_score: 4.9,
   };
 
   const seller = provider || defaultProvider;
@@ -89,6 +93,82 @@ export default function KarigarSellerProfile({ provider, onClose, onBook }) {
   // Extract clean first name
   const nameParts = displayBusinessName.split(" (");
   const displayName = nameParts[0];
+
+  // Dynamic Quote Calculation based on specialization and distance
+  const baseLabor = displaySpecialization.toLowerCase().includes("electric") ? 1200 : 1000;
+  const distanceKm = parseFloat(seller.distance || 0);
+  const travelFee = Math.round(distanceKm * 100); // Rs. 100 per km
+  const platformFee = 200;
+  const totalQuote = baseLabor + travelFee + platformFee;
+
+  // State for available slots and selected slot
+  const [dbSlots, setDbSlots] = useState([]);
+  const [selectedSlot, setSelectedSlot] = useState("");
+  const [loadingSlots, setLoadingSlots] = useState(false);
+
+  // Fetch slots from DB or generate high-fidelity fallback slots
+  useEffect(() => {
+    const fetchSlots = async () => {
+      if (!seller.id || seller.id.startsWith("mock-")) {
+        // Generates 4 premium slot options for today for mock providers
+        const mockSlots = ["10:30 AM", "01:00 PM", "03:30 PM", "06:00 PM"];
+        setDbSlots(mockSlots);
+        setSelectedSlot(mockSlots[1]); // Default select second slot
+        return;
+      }
+      
+      setLoadingSlots(true);
+      try {
+        const { data, error } = await supabase
+          .from("booking_slots")
+          .select("start_time, end_time")
+          .eq("provider_id", seller.id)
+          .eq("status", "available")
+          .gte("start_time", new Date().toISOString())
+          .order("start_time", { ascending: true })
+          .limit(4);
+
+        if (data && data.length > 0) {
+          const formatted = data.map(slot => {
+            const time = new Date(slot.start_time);
+            return time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          });
+          setDbSlots(formatted);
+          setSelectedSlot(formatted[0]);
+        } else {
+          // Fallback slots if no active available slots are stored in Supabase
+          const fallbackSlots = ["09:30 AM", "12:00 PM", "02:30 PM", "05:00 PM"];
+          setDbSlots(fallbackSlots);
+          setSelectedSlot(fallbackSlots[1]);
+        }
+      } catch (err) {
+        console.log("Error fetching booking slots:", err);
+        const fallbackSlots = ["09:30 AM", "12:00 PM", "02:30 PM", "05:00 PM"];
+        setDbSlots(fallbackSlots);
+        setSelectedSlot(fallbackSlots[1]);
+      } finally {
+        setLoadingSlots(false);
+      }
+    };
+
+    fetchSlots();
+  }, [seller.id]);
+
+  // Determine specialization tags
+  const getSpecTags = () => {
+    const spec = displaySpecialization.toLowerCase();
+    if (spec.includes("plumb")) {
+      return ["Leak Repair", "Drain Clean", "Pipe Fitting", "Tap Install"];
+    } else if (spec.includes("elect")) {
+      return ["House Wiring", "Fan Repair", "Short Circuit", "Board Install"];
+    } else if (spec.includes("ac") || spec.includes("cooling")) {
+      return ["AC Gas Refill", "Split Service", "Compressor Fix", "Leak Detection"];
+    } else {
+      return ["Expert Repair", "Quick Install", "Fault Diagnosis", "Maintenance"];
+    }
+  };
+
+  const specTags = getSpecTags();
 
   const handleHeartPress = () => {
     setLiked(!liked);
@@ -139,7 +219,7 @@ export default function KarigarSellerProfile({ provider, onClose, onBook }) {
           {/* Floating Bottom Card over Hero */}
           <View style={styles.heroOverlayContent}>
             <View style={styles.verifiedRow}>
-              <Award size={16} color="#34D399" />
+              <Award size={14} color="#34D399" />
               <Text style={styles.verifiedText}>PLATINUM VERIFIED SELLER</Text>
             </View>
             <Text style={styles.businessNameText} numberOfLines={1}>
@@ -153,7 +233,7 @@ export default function KarigarSellerProfile({ provider, onClose, onBook }) {
               <View style={styles.statDivider} />
               <Text style={styles.quickStatText}>{seller.distance ? `${seller.distance} km away` : "Nearby"}</Text>
               <View style={styles.statDivider} />
-              <Text style={styles.quickStatText}>{seller.location || "Karachi"}</Text>
+              <Text style={styles.quickStatText} numberOfLines={1}>{seller.location ? seller.location.split(',')[0] : "Karachi"}</Text>
             </View>
           </View>
         </View>
@@ -177,14 +257,13 @@ export default function KarigarSellerProfile({ provider, onClose, onBook }) {
             </View>
             <Text style={styles.occupationText}>{displaySpecialization}</Text>
             
-            {/* Action Buttons: Phone & Chat simulations */}
             <View style={styles.contactActionsRow}>
               <View style={styles.experienceBadge}>
-                <Briefcase size={14} color="#065F46" />
+                <Briefcase size={12} color="#065F46" />
                 <Text style={styles.experienceText}>5+ Years Exp</Text>
               </View>
               <View style={styles.jobsCompletedBadge}>
-                <ThumbsUp size={14} color="#065F46" />
+                <ThumbsUp size={12} color="#065F46" />
                 <Text style={styles.jobsCompletedText}>82 Jobs Finished</Text>
               </View>
             </View>
@@ -194,7 +273,7 @@ export default function KarigarSellerProfile({ provider, onClose, onBook }) {
         {/* ── Dynamic AI Audio Bio Playback Card ── */}
         <View style={styles.audioBioContainer}>
           <View style={styles.audioIconBg}>
-            <Play size={20} color="#065F46" fill="#065F46" />
+            <Play size={18} color="#065F46" fill="#065F46" />
           </View>
           <View style={styles.audioTextContent}>
             <Text style={styles.audioTitle}>Voice Introduction</Text>
@@ -207,12 +286,12 @@ export default function KarigarSellerProfile({ provider, onClose, onBook }) {
           >
             {playing ? (
               <>
-                <Pause size={16} color="white" fill="white" />
+                <Pause size={14} color="white" fill="white" />
                 <Text style={styles.audioPlayText}>Playing...</Text>
               </>
             ) : (
               <>
-                <Play size={16} color="#065F46" fill="#065F46" />
+                <Play size={14} color="#065F46" fill="#065F46" />
                 <Text style={[styles.audioPlayText, { color: "#065F46" }]}>Listen</Text>
               </>
             )}
@@ -257,40 +336,93 @@ export default function KarigarSellerProfile({ provider, onClose, onBook }) {
 
         {/* ── Tab Content Views ── */}
         <View style={styles.tabContentContainer}>
-          {/* ABOUT TAB */}
+          {/* ABOUT TAB - COMPACT SCREEN-FITTING DASHBOARD */}
           {activeTab === "about" && (
             <View style={styles.tabPane}>
-              <Text style={styles.sectionHeading}>Professional Biography</Text>
-              <Text style={styles.bioText}>
-                As a highly trained {displaySpecialization.toLowerCase()}, I specialize in premium installations, fast diagnoses, and safety-compliant repairs. With over five years of dedicated experience serving the Karachi region, I guarantee cleanliness, prompt arrival, and affordable transparent pricing. I work with high-quality copper wiring, premium diagnostic meters, and offer a 7-day guarantee on my labor.
-              </Text>
+              {/* Rating & On-time Score Widgets Side-by-Side */}
+              <View style={styles.statsCardsRow}>
+                <View style={styles.statScoreCard}>
+                  <View style={styles.scoreHeader}>
+                    <Star size={16} color="#FBBF24" fill="#FBBF24" />
+                    <Text style={styles.scoreTitle}>Rating & Reviews</Text>
+                  </View>
+                  <Text style={styles.scoreVal}>{seller.base_rating || "4.8"}</Text>
+                  <Text style={styles.scoreSub}>Excellent (82 Jobs)</Text>
+                </View>
 
-              <Text style={styles.sectionHeading}>Skills & Expertises</Text>
-              <View style={styles.skillsContainer}>
-                {["House Wiring", "Fan Repair", "Inverter Expert", "Circuit Overloads", "Board Replacements", "Safety Check"].map((skill, index) => (
-                  <View key={index} style={styles.skillChip}>
-                    <Text style={styles.skillChipText}>{skill}</Text>
+                <View style={styles.statScoreCard}>
+                  <View style={styles.scoreHeader}>
+                    <Clock size={16} color="#059669" />
+                    <Text style={styles.scoreTitle}>On-Time Score</Text>
+                  </View>
+                  <Text style={[styles.scoreVal, { color: "#059669" }]}>
+                    {seller.on_time_score ? `${Math.round(parseFloat(seller.on_time_score) * 20)}%` : "98%"}
+                  </Text>
+                  <Text style={styles.scoreSub}>Highly Punctual</Text>
+                </View>
+              </View>
+
+              {/* Specialization Tags */}
+              <Text style={styles.dashboardSectionTitle}>Specialization Tags</Text>
+              <View style={styles.tagsChipContainer}>
+                {specTags.map((tag, index) => (
+                  <View key={index} style={styles.specTagChip}>
+                    <Text style={styles.specTagText}>{tag}</Text>
                   </View>
                 ))}
               </View>
 
-              {/* Working Hours / Verification Card */}
-              <View style={styles.verificationBadgeCard}>
-                <View style={styles.badgeRow}>
-                  <CheckCircle size={20} color="#059669" />
-                  <Text style={styles.badgeRowTitle}>Security & Safety Verified</Text>
+              {/* Available Slots (Interactive From DB / Falling back cleanly) */}
+              <Text style={styles.dashboardSectionTitle}>Available Slots (DB Verified)</Text>
+              {loadingSlots ? (
+                <View style={styles.slotsLoader}>
+                  <ActivityIndicator size="small" color="#065F46" />
                 </View>
-                <Text style={styles.badgeRowSub}>
-                  CNIC registration and background check completed. 100% secure payment and dispute-free record.
-                </Text>
+              ) : (
+                <View style={styles.slotsRow}>
+                  {dbSlots.map((slot, index) => {
+                    const isSelected = selectedSlot === slot;
+                    return (
+                      <TouchableOpacity
+                        key={index}
+                        style={[styles.slotChipButton, isSelected && styles.slotChipButtonActive]}
+                        activeOpacity={0.855}
+                        onPress={() => setSelectedSlot(slot)}
+                      >
+                        <Calendar size={12} color={isSelected ? "white" : "#6B7280"} style={{ marginRight: 5 }} />
+                        <Text style={[styles.slotChipText, isSelected && styles.slotChipTextActive]}>
+                          {slot}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+
+              {/* Dynamic Price Quote breakdown receipt */}
+              <Text style={styles.dashboardSectionTitle}>Dynamic Price Quote Breakdown</Text>
+              <View style={styles.receiptContainer}>
+                <View style={styles.receiptRow}>
+                  <Text style={styles.receiptLabel}>Base Labor Charge ({displaySpecialization})</Text>
+                  <Text style={styles.receiptVal}>Rs. {baseLabor.toLocaleString()}</Text>
+                </View>
                 
-                <View style={[styles.badgeRow, { marginTop: 12 }]}>
-                  <Clock size={20} color="#059669" />
-                  <Text style={styles.badgeRowTitle}>Available Hours</Text>
+                <View style={styles.receiptRow}>
+                  <Text style={styles.receiptLabel}>Travel Fee ({distanceKm ? `${distanceKm} km` : "Nearby"})</Text>
+                  <Text style={styles.receiptVal}>Rs. {travelFee.toLocaleString()}</Text>
                 </View>
-                <Text style={styles.badgeRowSub}>
-                  Monday - Saturday: 9:00 AM to 8:00 PM • Sunday: Closed
-                </Text>
+
+                <View style={styles.receiptRow}>
+                  <Text style={styles.receiptLabel}>Platform Trust & Safety Fee</Text>
+                  <Text style={styles.receiptVal}>Rs. {platformFee.toLocaleString()}</Text>
+                </View>
+
+                <View style={styles.receiptDivider} />
+
+                <View style={[styles.receiptRow, { marginTop: 6 }]}>
+                  <Text style={styles.receiptTotalLabel}>Final Price Quote</Text>
+                  <Text style={styles.receiptTotalVal}>Rs. {totalQuote.toLocaleString()}</Text>
+                </View>
               </View>
             </View>
           )}
@@ -304,7 +436,7 @@ export default function KarigarSellerProfile({ provider, onClose, onBook }) {
               {DUMMY_SERVICES.map((srv, idx) => (
                 <View key={idx} style={styles.serviceItemCard}>
                   <View style={styles.serviceIconContainer}>
-                    <Briefcase size={20} color="#065F46" />
+                    <Briefcase size={18} color="#065F46" />
                   </View>
                   <View style={styles.serviceDetails}>
                     <Text style={styles.serviceName}>{srv.name}</Text>
@@ -320,10 +452,10 @@ export default function KarigarSellerProfile({ provider, onClose, onBook }) {
           {activeTab === "reviews" && (
             <View style={styles.tabPane}>
               <View style={styles.reviewsSummaryCard}>
-                <Text style={styles.summaryScoreText}>{seller.base_rating || "4.9"}</Text>
+                <Text style={styles.summaryScoreText}>{seller.base_rating || "4.8"}</Text>
                 <View style={styles.summaryStarsRow}>
                   {[1, 2, 3, 4, 5].map((s) => (
-                    <Star key={s} size={16} color="#FBBF24" fill="#FBBF24" style={{ marginRight: 2 }} />
+                    <Star key={s} size={14} color="#FBBF24" fill="#FBBF24" style={{ marginRight: 2 }} />
                   ))}
                 </View>
                 <Text style={styles.summaryCountText}>Based on 82 completed jobs</Text>
@@ -339,7 +471,7 @@ export default function KarigarSellerProfile({ provider, onClose, onBook }) {
                     <View style={styles.reviewUserInfo}>
                       <Text style={styles.reviewUserName}>{rev.name}</Text>
                       <View style={styles.reviewStarsRow}>
-                        <Star size={12} color="#FBBF24" fill="#FBBF24" />
+                        <Star size={11} color="#FBBF24" fill="#FBBF24" />
                         <Text style={styles.reviewScore}>{rev.rating.toFixed(1)}</Text>
                         <Text style={styles.reviewDate}>• {rev.date}</Text>
                       </View>
@@ -358,14 +490,14 @@ export default function KarigarSellerProfile({ provider, onClose, onBook }) {
       {/* ── Sticky Checkout Action Footer ── */}
       <View style={styles.footerSticky}>
         <View style={styles.priceContainer}>
-          <Text style={styles.priceLabel}>Estimated Labor</Text>
-          <Text style={styles.priceValue}>Rs. 1,500</Text>
+          <Text style={styles.priceLabel}>Estimated Dynamic Quote</Text>
+          <Text style={styles.priceValue}>Rs. {totalQuote.toLocaleString()}</Text>
         </View>
 
         <TouchableOpacity 
           style={styles.hireCtaButton} 
           activeOpacity={0.8}
-          onPress={() => onBook(seller)}
+          onPress={() => onBook({ ...seller, selectedSlot, dynamicPrice: totalQuote })}
         >
           <Text style={styles.hireCtaText}>Book {displayName} Now</Text>
         </TouchableOpacity>
@@ -397,7 +529,7 @@ const styles = StyleSheet.create({
   },
   heroHeader: {
     position: "absolute",
-    top: Platform.OS === "ios" ? 15 : 35,
+    top: Platform.OS === "ios" ? 10 : 30,
     left: 20,
     right: 20,
     flexDirection: "row",
@@ -406,9 +538,9 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   circleHeaderButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: "rgba(0, 0, 0, 0.45)",
     justifyContent: "center",
     alignItems: "center",
@@ -417,13 +549,13 @@ const styles = StyleSheet.create({
   },
   headerLogo: {
     fontFamily: "DMSans_700Bold",
-    fontSize: 18,
+    fontSize: 16,
     color: "white",
     letterSpacing: -0.5,
   },
   heroOverlayContent: {
     position: "absolute",
-    bottom: 25,
+    bottom: 20,
     left: 24,
     right: 24,
   },
@@ -431,22 +563,22 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   verifiedText: {
     fontFamily: "DMSans_700Bold",
-    fontSize: 11,
+    fontSize: 10,
     color: "#34D399",
-    letterSpacing: 1.5,
+    letterSpacing: 1.2,
   },
   businessNameText: {
     fontFamily: "DMSans_700Bold",
-    fontSize: 26,
+    fontSize: 24,
     color: "white",
-    marginBottom: 8,
+    marginBottom: 6,
     textShadowColor: "rgba(0,0,0,0.3)",
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
+    textShadowOffset: { width: 0, height: 1.5 },
+    textShadowRadius: 3,
   },
   quickStatsRow: {
     flexDirection: "row",
@@ -457,13 +589,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "rgba(251, 191, 36, 0.25)",
     paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
     gap: 4,
   },
   statChipText: {
     fontFamily: "DMSans_700Bold",
-    fontSize: 12,
+    fontSize: 11,
     color: "#FBBF24",
   },
   statDivider: {
@@ -471,50 +603,50 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: 2,
     backgroundColor: "rgba(255, 255, 255, 0.45)",
-    marginHorizontal: 10,
+    marginHorizontal: 8,
   },
   quickStatText: {
     fontFamily: "DMSans_500Medium",
-    fontSize: 13,
+    fontSize: 12,
     color: "#E5E7EB",
   },
   // Overlapping Info Box
   overlapCard: {
     marginHorizontal: 20,
-    marginTop: -20,
+    marginTop: -16,
     backgroundColor: "white",
-    borderRadius: 28,
-    padding: 20,
+    borderRadius: 24,
+    padding: 16,
     flexDirection: "row",
     alignItems: "center",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 3,
     zIndex: 20,
   },
   profilePicWrapper: {
     position: "relative",
-    marginRight: 16,
+    marginRight: 14,
   },
   profilePic: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    borderWidth: 3,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 2.5,
     borderColor: "white",
     backgroundColor: "#F3F4F6",
   },
   onlineBadge: {
     position: "absolute",
-    bottom: 3,
-    right: 3,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
+    bottom: 2,
+    right: 2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
     backgroundColor: "#10B981",
-    borderWidth: 2.5,
+    borderWidth: 2,
     borderColor: "white",
   },
   primaryDetailsContainer: {
@@ -524,94 +656,94 @@ const styles = StyleSheet.create({
   nameBadgeContainer: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 4,
+    marginBottom: 2,
   },
   sellerName: {
     fontFamily: "DMSans_700Bold",
-    fontSize: 20,
+    fontSize: 18,
     color: "#111827",
   },
   occupationText: {
     fontFamily: "DMSans_500Medium",
-    fontSize: 14,
+    fontSize: 13,
     color: "#6B7280",
-    marginBottom: 10,
+    marginBottom: 6,
   },
   contactActionsRow: {
     flexDirection: "row",
-    gap: 8,
+    gap: 6,
   },
   experienceBadge: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#ECFDF5",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+    gap: 3,
   },
   experienceText: {
     fontFamily: "DMSans_700Bold",
-    fontSize: 11,
+    fontSize: 10,
     color: "#065F46",
   },
   jobsCompletedBadge: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#ECFDF5",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+    gap: 3,
   },
   jobsCompletedText: {
     fontFamily: "DMSans_700Bold",
-    fontSize: 11,
+    fontSize: 10,
     color: "#065F46",
   },
   // Audio Bio
   audioBioContainer: {
     marginHorizontal: 20,
-    marginTop: 15,
+    marginTop: 12,
     backgroundColor: "#E6F4EA",
     borderWidth: 1,
     borderColor: "#CEEBD6",
-    borderRadius: 20,
-    padding: 14,
+    borderRadius: 16,
+    padding: 12,
     flexDirection: "row",
     alignItems: "center",
   },
   audioIconBg: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
+    width: 36,
+    height: 36,
+    borderRadius: 12,
     backgroundColor: "white",
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 12,
+    marginRight: 10,
   },
   audioTextContent: {
     flex: 1,
   },
   audioTitle: {
     fontFamily: "DMSans_700Bold",
-    fontSize: 14,
+    fontSize: 13,
     color: "#065F46",
     marginBottom: 2,
   },
   audioSubtitle: {
     fontFamily: "DMSans_400Regular",
-    fontSize: 11,
+    fontSize: 10,
     color: "#3B7A57",
   },
   audioPlayButton: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "white",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    gap: 4,
     borderWidth: 1,
     borderColor: "#B7E1C1",
   },
@@ -621,27 +753,27 @@ const styles = StyleSheet.create({
   },
   audioPlayText: {
     fontFamily: "DMSans_700Bold",
-    fontSize: 12,
+    fontSize: 11,
     color: "white",
   },
   // Tab Buttons Layout
   tabsContainer: {
     flexDirection: "row",
     marginHorizontal: 20,
-    marginTop: 25,
+    marginTop: 20,
     borderBottomWidth: 1,
     borderBottomColor: "#E5E7EB",
   },
   tabButton: {
     flex: 1,
-    paddingVertical: 14,
+    paddingVertical: 12,
     alignItems: "center",
     position: "relative",
   },
   tabButtonActive: {},
   tabButtonText: {
     fontFamily: "DMSans_500Medium",
-    fontSize: 14,
+    fontSize: 13,
     color: "#6B7280",
   },
   tabButtonTextActive: {
@@ -651,84 +783,166 @@ const styles = StyleSheet.create({
   activeTabIndicator: {
     position: "absolute",
     bottom: -1,
-    height: 3,
+    height: 2.5,
     backgroundColor: "#065F46",
     width: "45%",
-    borderTopLeftRadius: 3,
-    borderTopRightRadius: 3,
+    borderTopLeftRadius: 2.5,
+    borderTopRightRadius: 2.5,
   },
   // Tab Panel contents
   tabContentContainer: {
     paddingHorizontal: 20,
-    marginTop: 20,
+    marginTop: 15,
   },
   tabPane: {},
   sectionHeading: {
     fontFamily: "DMSans_700Bold",
-    fontSize: 16,
+    fontSize: 15,
     color: "#111827",
-    marginBottom: 10,
+    marginBottom: 8,
   },
   sectionSub: {
     fontFamily: "DMSans_400Regular",
-    fontSize: 12,
+    fontSize: 11,
     color: "#6B7280",
-    marginBottom: 15,
+    marginBottom: 12,
   },
-  bioText: {
-    fontFamily: "DMSans_400Regular",
+  // Dashboard Elements Styles
+  dashboardSectionTitle: {
+    fontFamily: "DMSans_700Bold",
     fontSize: 14,
-    color: "#4B5563",
-    lineHeight: 22,
-    marginBottom: 20,
-  },
-  skillsContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 20,
-  },
-  skillChip: {
-    backgroundColor: "#F3F4F6",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-  },
-  skillChipText: {
-    fontFamily: "DMSans_500Medium",
-    fontSize: 12,
     color: "#374151",
+    marginTop: 16,
+    marginBottom: 10,
   },
-  verificationBadgeCard: {
+  statsCardsRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  statScoreCard: {
+    flex: 1,
     backgroundColor: "white",
-    borderRadius: 20,
+    borderRadius: 16,
+    padding: 12,
     borderWidth: 1,
     borderColor: "#E5E7EB",
-    padding: 16,
+    alignItems: "center",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.02,
     shadowRadius: 4,
+    elevation: 1,
   },
-  badgeRow: {
+  scoreHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginBottom: 4,
+    gap: 5,
+    marginBottom: 6,
   },
-  badgeRowTitle: {
+  scoreTitle: {
     fontFamily: "DMSans_700Bold",
-    fontSize: 14,
-    color: "#065F46",
+    fontSize: 11,
+    color: "#6B7280",
   },
-  badgeRowSub: {
-    fontFamily: "DMSans_400Regular",
+  scoreVal: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 22,
+    color: "#D97706",
+    marginBottom: 2,
+  },
+  scoreSub: {
+    fontFamily: "DMSans_500Medium",
+    fontSize: 10,
+    color: "#9CA3AF",
+  },
+  tagsChipContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  specTagChip: {
+    backgroundColor: "#F3F4F6",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  specTagText: {
+    fontFamily: "DMSans_500Medium",
+    fontSize: 11,
+    color: "#4B5563",
+  },
+  slotsRow: {
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "space-between",
+  },
+  slotChipButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "white",
+    borderRadius: 10,
+    paddingVertical: 8,
+    borderWidth: 1.5,
+    borderColor: "#E5E7EB",
+  },
+  slotChipButtonActive: {
+    backgroundColor: "#065F46",
+    borderColor: "#065F46",
+  },
+  slotChipText: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 11,
+    color: "#4B5563",
+  },
+  slotChipTextActive: {
+    color: "white",
+  },
+  slotsLoader: {
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  receiptContainer: {
+    backgroundColor: "white",
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderStyle: "dashed",
+    borderColor: "#D1D5DB",
+    padding: 14,
+  },
+  receiptRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginVertical: 4,
+  },
+  receiptLabel: {
+    fontFamily: "DMSans_500Medium",
     fontSize: 12,
     color: "#6B7280",
-    lineHeight: 18,
-    paddingLeft: 28,
+  },
+  receiptVal: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 12,
+    color: "#111827",
+  },
+  receiptDivider: {
+    height: 1,
+    backgroundColor: "#E5E7EB",
+    marginVertical: 6,
+  },
+  receiptTotalLabel: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 13,
+    color: "#111827",
+  },
+  receiptTotalVal: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 16,
+    color: "#065F46",
   },
   // Services Tab List
   serviceItemCard: {
@@ -736,90 +950,90 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "white",
     borderRadius: 16,
-    padding: 14,
-    marginBottom: 12,
+    padding: 12,
+    marginBottom: 10,
     borderWidth: 1,
     borderColor: "#E5E7EB",
   },
   serviceIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     backgroundColor: "#ECFDF5",
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 12,
+    marginRight: 10,
   },
   serviceDetails: {
     flex: 1,
   },
   serviceName: {
     fontFamily: "DMSans_700Bold",
-    fontSize: 14,
+    fontSize: 13,
     color: "#111827",
     marginBottom: 2,
   },
   serviceEstimate: {
     fontFamily: "DMSans_500Medium",
-    fontSize: 11,
+    fontSize: 10,
     color: "#9CA3AF",
   },
   servicePrice: {
     fontFamily: "DMSans_700Bold",
-    fontSize: 15,
+    fontSize: 14,
     color: "#065F46",
   },
   // Reviews Tab List
   reviewsSummaryCard: {
     backgroundColor: "white",
-    borderRadius: 20,
-    padding: 20,
+    borderRadius: 16,
+    padding: 16,
     alignItems: "center",
     borderWidth: 1,
     borderColor: "#E5E7EB",
-    marginBottom: 20,
+    marginBottom: 16,
   },
   summaryScoreText: {
     fontFamily: "DMSans_700Bold",
-    fontSize: 36,
+    fontSize: 32,
     color: "#111827",
-    lineHeight: 40,
+    lineHeight: 36,
     marginBottom: 4,
   },
   summaryStarsRow: {
     flexDirection: "row",
-    marginBottom: 6,
+    marginBottom: 4,
   },
   summaryCountText: {
     fontFamily: "DMSans_500Medium",
-    fontSize: 12,
+    fontSize: 11,
     color: "#6B7280",
   },
   reviewCard: {
     backgroundColor: "white",
-    borderRadius: 16,
-    padding: 14,
+    borderRadius: 14,
+    padding: 12,
     borderWidth: 1,
     borderColor: "#E5E7EB",
-    marginBottom: 12,
+    marginBottom: 10,
   },
   reviewHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 10,
+    marginBottom: 8,
   },
   reviewUserBg: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: "#ECFDF5",
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 10,
+    marginRight: 8,
   },
   reviewUserText: {
     fontFamily: "DMSans_700Bold",
-    fontSize: 14,
+    fontSize: 13,
     color: "#065F46",
   },
   reviewUserInfo: {
@@ -827,9 +1041,9 @@ const styles = StyleSheet.create({
   },
   reviewUserName: {
     fontFamily: "DMSans_700Bold",
-    fontSize: 13,
+    fontSize: 12,
     color: "#111827",
-    marginBottom: 2,
+    marginBottom: 1,
   },
   reviewStarsRow: {
     flexDirection: "row",
@@ -837,21 +1051,21 @@ const styles = StyleSheet.create({
   },
   reviewScore: {
     fontFamily: "DMSans_700Bold",
-    fontSize: 11,
+    fontSize: 10,
     color: "#D97706",
-    marginLeft: 3,
+    marginLeft: 2,
   },
   reviewDate: {
     fontFamily: "DMSans_500Medium",
     fontSize: 10,
     color: "#9CA3AF",
-    marginLeft: 6,
+    marginLeft: 4,
   },
   reviewComment: {
     fontFamily: "DMSans_400Regular",
-    fontSize: 13,
+    fontSize: 12,
     color: "#4B5563",
-    lineHeight: 18,
+    lineHeight: 16,
   },
   // Sticky Footer
   footerSticky: {
@@ -861,50 +1075,50 @@ const styles = StyleSheet.create({
     right: 0,
     backgroundColor: "white",
     paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: Platform.OS === "ios" ? 34 : 20,
+    paddingTop: 14,
+    paddingBottom: Platform.OS === "ios" ? 30 : 16,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     borderTopWidth: 1,
     borderTopColor: "#E5E7EB",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: -10 },
-    shadowOpacity: 0.08,
-    shadowRadius: 15,
-    elevation: 20,
+    shadowOffset: { width: 0, height: -8 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 15,
   },
   priceContainer: {
     justifyContent: "center",
   },
   priceLabel: {
     fontFamily: "DMSans_500Medium",
-    fontSize: 12,
+    fontSize: 11,
     color: "#6B7280",
     marginBottom: 2,
   },
   priceValue: {
     fontFamily: "DMSans_700Bold",
-    fontSize: 22,
+    fontSize: 20,
     color: "#065F46",
   },
   hireCtaButton: {
     flex: 1,
-    height: 56,
+    height: 52,
     backgroundColor: "#065F46",
-    borderRadius: 16,
+    borderRadius: 14,
     justifyContent: "center",
     alignItems: "center",
-    marginLeft: 20,
+    marginLeft: 16,
     shadowColor: "#065F46",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 3,
   },
   hireCtaText: {
     fontFamily: "DMSans_700Bold",
-    fontSize: 16,
+    fontSize: 15,
     color: "white",
   },
 });

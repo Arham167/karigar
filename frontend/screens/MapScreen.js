@@ -591,9 +591,12 @@ export default function MapScreen({ navigation }) {
   };
 
   const handleBookProvider = (provider) => {
+    const bookingTime = provider.selectedSlot || matchedTime || "12:00 PM";
+    const finalPrice = provider.dynamicPrice || 1500;
+
     showCustomAlert(
       "Confirm Booking 🛠️",
-      `Would you like to book "${provider.business_name}" for ${matchedService} at ${matchedTime}?`,
+      `Would you like to book "${provider.business_name}" for ${matchedService} at ${bookingTime} for a dynamic quote of Rs. ${finalPrice.toLocaleString()}?`,
       [
         { text: "Cancel", style: "cancel", onPress: () => {} },
         {
@@ -607,11 +610,11 @@ export default function MapScreen({ navigation }) {
               const { error } = await supabase.from("bookings").insert([
                 {
                   buyer_id: user.id,
-                  provider_id: provider.id.startsWith("mock-") ? null : provider.id, // Only use real provider ID if not mock
+                  provider_id: provider.id && provider.id.startsWith("mock-") ? null : provider.id, // Only use real provider ID if not mock
                   service_type: matchedService,
                   location: matchedLocation,
                   requested_time: new Date().toISOString(),
-                  price: 1800, // custom confirm price
+                  price: finalPrice,
                   status: "confirmed",
                 },
               ]);
