@@ -89,7 +89,7 @@ export default function SellerDashboard({ navigation }) {
       const { data: bookings, error: bookingsError } = await supabase
         .from("bookings")
         .select("*")
-        .eq("provider_id", provider.id)
+        .eq("seller_id", provider.id)
         .order("created_at", { ascending: false });
 
       if (bookingsError) throw bookingsError;

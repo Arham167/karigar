@@ -581,7 +581,7 @@ export default function MapScreen({ navigation }) {
               const { error } = await supabase.from("bookings").insert([
                 {
                   buyer_id: user.id,
-                  provider_id: provider.id && provider.id.startsWith("mock-") ? null : provider.id, // Only use real provider ID if not mock
+                  seller_id: provider.id && provider.id.startsWith("mock-") ? null : provider.id, // Only use real provider ID if not mock
                   service_type: matchedService,
                   location: matchedLocation,
                   requested_time: new Date().toISOString(),
@@ -631,7 +631,7 @@ export default function MapScreen({ navigation }) {
           .from("bookings")
           .select("*")
           .eq("buyer_id", user.id)
-          .eq("provider_id", providerId)
+          .eq("seller_id", providerId)
           .eq("status", "pending")
           .limit(1);
           
@@ -651,7 +651,7 @@ export default function MapScreen({ navigation }) {
           .insert([
             {
               buyer_id: user.id,
-              provider_id: providerId,
+              seller_id: providerId,
               service_type: serviceType,
               location: locationStr,
               requested_time: new Date().toISOString(),
