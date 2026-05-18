@@ -47,11 +47,26 @@ export default function KarigarChat({ route, navigation }) {
   };
 
   // State Variables
+  // State Variables
   const [messages, setMessages] = useState([]);
+  const messagesRef = useRef([]);
+
   const [inputText, setInputText] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  
   const [currentUserId, setCurrentUserId] = useState(null);
+  const currentUserIdRef = useRef(null);
+
+  const updateMessages = (newMsgs) => {
+    messagesRef.current = newMsgs;
+    setMessages(newMsgs);
+  };
+
+  const updateCurrentUserId = (id) => {
+    currentUserIdRef.current = id;
+    setCurrentUserId(id);
+  };
 
   // Negotiation states
   const [buyerAgreed, setBuyerAgreed] = useState(false);
@@ -71,25 +86,30 @@ export default function KarigarChat({ route, navigation }) {
   const sellerDisplayName = displayBusinessName.split(" (")[0];
   const customerName = buyerName || "Arham N.";
 
+  const MOCK_BUYER_UUID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const MOCK_SELLER_UUID = "ssssssss-ssss-4sss-8sss-ssssssssssss";
+
   // Fetch Current User on Mount
   useEffect(() => {
     const initChat = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
+        let resolvedUserId = null;
         if (user) {
-          setCurrentUserId(user.id);
+          resolvedUserId = user.id;
         } else {
-          setCurrentUserId(role === "buyer" ? "buyer-mock-id" : "seller-mock-id");
+          resolvedUserId = role === "buyer" ? MOCK_BUYER_UUID : MOCK_SELLER_UUID;
         }
+        updateCurrentUserId(resolvedUserId);
 
         // Fetch initial messages and agreement status
         await fetchAgreementStatus();
-        await fetchMessages();
+        await fetchMessages(resolvedUserId);
       } catch (err) {
         console.log("Error initializing chat:", err);
-        // Fallback for mocks
-        setCurrentUserId(role === "buyer" ? "buyer-mock-id" : "seller-mock-id");
-        loadMockMessages();
+        const fallbackId = role === "buyer" ? MOCK_BUYER_UUID : MOCK_SELLER_UUID;
+        updateCurrentUserId(fallbackId);
+        await fetchMessages(fallbackId);
         setLoading(false);
       }
     };
@@ -108,7 +128,6 @@ export default function KarigarChat({ route, navigation }) {
   // Fetch Agreement Status from Backend
   const fetchAgreementStatus = async () => {
     if (bookingId.startsWith("mock-booking")) {
-      // Local testing fallbacks
       return;
     }
     try {
@@ -133,12 +152,8 @@ export default function KarigarChat({ route, navigation }) {
   };
 
   // Fetch Chat Messages from Backend
-  const fetchMessages = async () => {
-    if (bookingId.startsWith("mock-booking")) {
-      loadMockMessages();
-      setLoading(false);
-      return;
-    }
+  const fetchMessages = async (customUserId = null) => {
+    const activeUserId = customUserId || currentUserIdRef.current || (role === "buyer" ? MOCK_BUYER_UUID : MOCK_SELLER_UUID);
 
     try {
       setLoading(true);
@@ -152,11 +167,11 @@ export default function KarigarChat({ route, navigation }) {
             const formatted = data.messages.map(msg => ({
               id: msg.id,
               text: msg.message,
-              from: msg.sender_id === currentUserId || (role === "buyer" && msg.sender_id.includes("buyer")) || (role === "seller" && msg.sender_id.includes("seller")) ? "me" : "other",
+              from: msg.sender_id === activeUserId || (role === "buyer" && (msg.sender_id === MOCK_BUYER_UUID || msg.sender_id.includes("buyer"))) || (role === "seller" && (msg.sender_id === MOCK_SELLER_UUID || msg.sender_id.includes("seller"))) ? "me" : "other",
               time: formatTime(msg.timestamp),
               system: false
             }));
-            setMessages(formatted);
+            updateMessages(formatted);
           } else {
             loadMockMessages();
           }
@@ -177,7 +192,9 @@ export default function KarigarChat({ route, navigation }) {
 
   // Silently sync messages for polling
   const syncNewMessages = async () => {
-    if (bookingId.startsWith("mock-booking")) return;
+    const activeUserId = currentUserIdRef.current || (role === "buyer" ? MOCK_BUYER_UUID : MOCK_SELLER_UUID);
+    if (!activeUserId) return;
+
     try {
       const response = await fetch(`${BASE_URL}/api/chat/messages/${bookingId}`, {
         headers: { "Bypass-Tunnel-Reminder": "true" }
@@ -188,16 +205,19 @@ export default function KarigarChat({ route, navigation }) {
           const formatted = data.messages.map(msg => ({
             id: msg.id,
             text: msg.message,
-            from: msg.sender_id === currentUserId || (role === "buyer" && msg.sender_id.includes("buyer")) || (role === "seller" && msg.sender_id.includes("seller")) ? "me" : "other",
+            from: msg.sender_id === activeUserId || (role === "buyer" && (msg.sender_id === MOCK_BUYER_UUID || msg.sender_id.includes("buyer"))) || (role === "seller" && (msg.sender_id === MOCK_SELLER_UUID || msg.sender_id.includes("seller"))) ? "me" : "other",
             time: formatTime(msg.timestamp),
             system: false
           }));
 
           // Only update if count changed to prevent jumpiness
-          if (formatted.length !== messages.filter(m => !m.system).length) {
+          const currentNonSystemCount = messagesRef.current.filter(m => !m.system).length;
+
+          if (formatted.length !== currentNonSystemCount) {
             // Re-inject system messages dynamically based on agreement state
-            const finalMsgs = [...formatted];
-            setMessages(finalMsgs);
+            const existingSystemMsgs = messagesRef.current.filter(m => m.system);
+            const finalMsgs = [...formatted, ...existingSystemMsgs];
+            updateMessages(finalMsgs);
             setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
           }
         }
@@ -209,7 +229,7 @@ export default function KarigarChat({ route, navigation }) {
 
   // Populate Mock Messages for a gorgeous visual layout instantly
   const loadMockMessages = () => {
-    setMessages([]);
+    updateMessages([]);
   };
 
   const formatTime = (isoString) => {
@@ -249,41 +269,58 @@ export default function KarigarChat({ route, navigation }) {
       system: false
     };
 
-    setMessages(prev => [...prev, newMsgLocal]);
+    updateMessages([...messagesRef.current, newMsgLocal]);
     setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
 
-    // Call Backend secure message endpoint
-    if (!bookingId.startsWith("mock-booking")) {
-      try {
-        setSending(true);
-        await fetch(`${BASE_URL}/api/chat/message`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Bypass-Tunnel-Reminder": "true" },
-          body: JSON.stringify({
-            bookingId: bookingId,
-            senderId: currentUserId || (role === "buyer" ? "buyer-id" : "seller-id"),
-            message: userMsgText
-          })
-        });
-      } catch (err) {
-        console.log("Error sending message to backend:", err);
-      } finally {
-        setSending(false);
-      }
-    } else {
+    const activeUserId = currentUserIdRef.current || (role === "buyer" ? MOCK_BUYER_UUID : MOCK_SELLER_UUID);
+
+    // Call Backend secure message endpoint for ALL bookings (mock and real) to ensure memory store sync
+    try {
+      setSending(true);
+      await fetch(`${BASE_URL}/api/chat/message`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Bypass-Tunnel-Reminder": "true" },
+        body: JSON.stringify({
+          bookingId: bookingId,
+          senderId: activeUserId,
+          message: userMsgText
+        })
+      });
+    } catch (err) {
+      console.log("Error sending message to backend:", err);
+    } finally {
+      setSending(false);
+    }
+
+    if (bookingId.startsWith("mock-booking") && role === "buyer") {
       // Simulate quick auto-responses for mock providers
-      setTimeout(() => {
-        const reply = {
+      setTimeout(async () => {
+        const replyText = "I'm ready! Let's click 'Agree to Book' so we can confirm the schedule.";
+        const replySender = "seller-mock-id";
+        const replyLocal = {
           id: Date.now() + 1,
           from: "other",
-          text: role === "buyer"
-            ? "I'm ready! Let's click 'Agree to Book' so we can confirm the schedule."
-            : "Awesome! Please click 'Agree to Book' to confirm Rs. " + negotiationPrice + " on your end.",
+          text: replyText,
           time: getNowFormattedTime(),
           system: false
         };
-        setMessages(prev => [...prev, reply]);
+        updateMessages([...messagesRef.current, replyLocal]);
         setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 200);
+
+        // Send mock reply to backend memory store so seller sees it when logging in!
+        try {
+          await fetch(`${BASE_URL}/api/chat/message`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Bypass-Tunnel-Reminder": "true" },
+            body: JSON.stringify({
+              bookingId: bookingId,
+              senderId: replySender,
+              message: replyText
+            })
+          });
+        } catch (e) {
+          console.log("Mock reply sync err:", e);
+        }
       }, 1500);
     }
   };
@@ -302,7 +339,7 @@ export default function KarigarChat({ route, navigation }) {
       text: `${role === "buyer" ? "Customer" : "Karigar"} agreed to lock booking at Rs. ${negotiationPrice.toLocaleString()}`
     };
 
-    setMessages(prev => [...prev, systemMsg]);
+    updateMessages([...messagesRef.current, systemMsg]);
     setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
 
     if (!bookingId.startsWith("mock-booking")) {
@@ -312,7 +349,7 @@ export default function KarigarChat({ route, navigation }) {
           headers: { "Content-Type": "application/json", "Bypass-Tunnel-Reminder": "true" },
           body: JSON.stringify({
             bookingId: bookingId,
-            userId: currentUserId,
+            userId: currentUserIdRef.current,
             role: role,
             price: negotiationPrice
           })
@@ -332,7 +369,7 @@ export default function KarigarChat({ route, navigation }) {
                 isLock: true,
                 text: `🔒 Price Agreement Locked! Both parties agreed to Rs. ${negotiationPrice.toLocaleString()}. Book Now is now enabled.`
               };
-              setMessages(prev => [...prev, lockMsg]);
+              updateMessages([...messagesRef.current, lockMsg]);
               setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 200);
             }
           }
@@ -354,7 +391,7 @@ export default function KarigarChat({ route, navigation }) {
           isLock: true,
           text: `🔒 Price Agreement Locked! Both parties agreed to Rs. ${negotiationPrice.toLocaleString()}. Book Now is now enabled.`
         };
-        setMessages(prev => [...prev, lockMsg]);
+        updateMessages([...messagesRef.current, lockMsg]);
         setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 200);
       }, 2000);
     }
