@@ -11,6 +11,8 @@ import {
   Image,
   ActivityIndicator,
   Modal,
+  TouchableWithoutFeedback,
+  Keyboard,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path, Rect, Circle, Polyline, G } from "react-native-svg";
@@ -429,7 +431,14 @@ export default function ProfileSetupScreen({ navigation, route }) {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator={false}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <View style={{ width: "100%" }}>
         {/* Heading */}
         <View style={styles.titleContainer}>
           <Text style={styles.title}>
@@ -574,6 +583,8 @@ export default function ProfileSetupScreen({ navigation, route }) {
 
         {/* Bottom Spacer */}
         <View style={{ height: 120 }} />
+          </View>
+        </TouchableWithoutFeedback>
       </ScrollView>
 
       {/* Bottom CTA */}

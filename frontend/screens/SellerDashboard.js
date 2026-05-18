@@ -12,6 +12,7 @@ import {
   Dimensions,
   RefreshControl,
   Alert,
+  Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { 
@@ -45,6 +46,78 @@ export default function SellerDashboard({ navigation }) {
     rating: 4.9,
     onTime: "98%"
   });
+
+  // Polling for incoming chat notifications (Seller side)
+  const [lastNotificationCheck, setLastNotificationCheck] = useState(new Date().toISOString());
+  const [inAppNotification, setInAppNotification] = useState(null);
+
+  useEffect(() => {
+    const checkNotificationInterval = setInterval(async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        // Fetch seller's provider profile
+        const { data: provider } = await supabase
+          .from("providers")
+          .select("id")
+          .eq("user_id", user.id)
+          .single();
+
+        const activeSellerId = provider?.id || user.id;
+
+        // Fetch seller's bookings
+        const { data: userBookings } = await supabase
+          .from("bookings")
+          .select("id, service_type, seller_id, buyer_id, price")
+          .eq("seller_id", activeSellerId);
+
+        if (!userBookings || userBookings.length === 0) return;
+
+        const bookingIds = userBookings.map(b => b.id);
+
+        // Fetch any messages for these bookings sent by other users after lastNotificationCheck
+        const { data: newMsgs } = await supabase
+          .from("chats")
+          .select("id, booking_id, sender_id, message, timestamp")
+          .in("booking_id", bookingIds)
+          .neq("sender_id", user.id)
+          .gt("timestamp", lastNotificationCheck)
+          .order("timestamp", { ascending: false });
+
+        if (newMsgs && newMsgs.length > 0) {
+          const latestMsg = newMsgs[0];
+          const matchingBooking = userBookings.find(b => b.id === latestMsg.booking_id);
+
+          // Get buyer details
+          const { data: buyerProfile } = await supabase
+            .from("profiles")
+            .select("name")
+            .eq("id", matchingBooking.buyer_id)
+            .single();
+
+          setLastNotificationCheck(latestMsg.timestamp);
+          setInAppNotification({
+            id: latestMsg.id,
+            bookingId: latestMsg.booking_id,
+            title: "New Message from Customer",
+            message: latestMsg.message,
+            booking: matchingBooking,
+            buyerName: buyerProfile?.name || "Customer"
+          });
+
+          // Dismiss after 4 seconds
+          setTimeout(() => {
+            setInAppNotification(prev => prev?.id === latestMsg.id ? null : prev);
+          }, 4000);
+        }
+      } catch (err) {
+        console.log("Error in chat notifications poll:", err);
+      }
+    }, 4500);
+
+    return () => clearInterval(checkNotificationInterval);
+  }, [lastNotificationCheck]);
 
   // Load seller details on mount
   useEffect(() => {
@@ -244,6 +317,34 @@ export default function SellerDashboard({ navigation }) {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" translucent={false} backgroundColor="#032F23" />
+
+      {/* Gorgeous In-App Notification Toast */}
+      {inAppNotification && (
+        <TouchableOpacity
+          style={styles.notificationToast}
+          activeOpacity={0.9}
+          onPress={() => {
+            const booking = inAppNotification.booking;
+            setInAppNotification(null);
+            navigation.navigate("KarigarChat", {
+              bookingId: booking.id,
+              provider: providerProfile,
+              role: "seller",
+              dynamicQuote: booking.price || 1200,
+              buyerName: inAppNotification.buyerName
+            });
+          }}
+        >
+          <View style={styles.toastHeader}>
+            <MessageSquare size={16} color="#059669" style={{ marginRight: 6 }} />
+            <Text style={styles.toastTitle}>{inAppNotification.title}</Text>
+            <Text style={styles.toastTime}>Just Now</Text>
+          </View>
+          <Text style={styles.toastMessage} numberOfLines={1}>
+            {inAppNotification.message}
+          </Text>
+        </TouchableOpacity>
+      )}
       
       {/* ── 1. Top Emerald Header ── */}
       <View style={styles.header}>
@@ -732,5 +833,46 @@ const styles = StyleSheet.create({
     fontFamily: "DMSans_700Bold",
     fontSize: 11,
     color: "#065F46",
+  },
+  notificationToast: {
+    position: "absolute",
+    top: Platform.OS === "ios" ? 50 : 20,
+    left: 16,
+    right: 16,
+    backgroundColor: "white",
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderWidth: 1.5,
+    borderColor: "#065F46",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 8,
+    zIndex: 999,
+  },
+  toastHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  toastTitle: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 12,
+    color: "#1F2937",
+    marginLeft: 6,
+    flex: 1,
+  },
+  toastTime: {
+    fontFamily: "DMSans_500Medium",
+    fontSize: 10,
+    color: "#9CA3AF",
+  },
+  toastMessage: {
+    fontFamily: "DMSans_400Regular",
+    fontSize: 13,
+    color: "#4B5563",
+    lineHeight: 16,
   },
 });

@@ -313,8 +313,34 @@ exports.matchProviders = async (req, res) => {
       }
     }
 
-    // Limit to top 5 popups
-    const topProviders = matchingProviders.slice(0, 5);
+    // To prevent overlapping markers on the map, we'll keep track of coordinates and add a tiny jitter if there are duplicates
+    const assignedCoordinates = [];
+    const topProviders = matchingProviders.slice(0, 5).map((provider, idx) => {
+      let pLat = parseFloat(provider.lat);
+      let pLng = parseFloat(provider.lng);
+
+      // Check if this coordinate is already assigned to a provider in this batch
+      const isDuplicate = assignedCoordinates.some(c => 
+        Math.abs(c.lat - pLat) < 0.0002 && Math.abs(c.lng - pLng) < 0.0002
+      );
+
+      if (isDuplicate) {
+        // Add a small jitter (approx 20-40 meters)
+        const angle = (idx * 2 * Math.PI) / 5;
+        const radius = 0.0003 + (idx * 0.00005); // jitter radius in degrees
+        pLat += radius * Math.cos(angle);
+        pLng += radius * Math.sin(angle);
+        console.log(`[Matching Engine] Overlapping provider "${provider.business_name}" coordinate jittered to:`, pLat, pLng);
+      }
+
+      assignedCoordinates.push({ lat: pLat, lng: pLng });
+
+      return {
+        ...provider,
+        lat: pLat,
+        lng: pLng
+      };
+    });
 
     console.log(`[Matching Engine] Returning top ${topProviders.length} providers:`, topProviders.map(p => p.business_name));
 
