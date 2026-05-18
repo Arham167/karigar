@@ -107,6 +107,13 @@ export default function KarigarSellerProfile({ provider, onClose, onBook, onChat
   // Fetch slots from DB or generate high-fidelity fallback slots
   useEffect(() => {
     const fetchSlots = async () => {
+      // Prioritize live slots passed from our Google Sheet CRM matching engine!
+      if (seller.available_slots && seller.available_slots.length > 0) {
+        setDbSlots(seller.available_slots);
+        setSelectedSlot(seller.available_slots[0]);
+        return;
+      }
+
       if (!seller.id || seller.id.startsWith("mock-")) {
         // Generates 4 premium slot options for today for mock providers
         const mockSlots = ["10:30 AM", "01:00 PM", "03:30 PM", "06:00 PM"];

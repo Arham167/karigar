@@ -170,13 +170,14 @@ exports.matchProviders = async (req, res) => {
         const endTimeWindow = new Date(reqTime.getTime() + 2 * 60 * 60 * 1000);
 
         const googleSheets = require("../utils/googleSheets");
+        const SPREADSHEET_ID = process.env.SHARED_GOOGLE_SHEET_ID;
 
         const availabilityPromises = matchingProviders.map(async (provider) => {
           // --- PATH A: GOOGLE SHEETS CRM ---
-          if (provider.use_sheets_crm && provider.google_sheet_id) {
+          if (SPREADSHEET_ID) {
             try {
               console.log(`[Matching Engine] Reading live calendar from Google Sheet for provider: ${provider.business_name}`);
-              const sheetBookings = await googleSheets.fetchSellerCalendar(provider.google_sheet_id);
+              const sheetBookings = await googleSheets.fetchSellerCalendar(SPREADSHEET_ID, 'Sheet1!A2:I100', provider.id);
               
               // Overlap check: Slot starts before window ends, and ends after window starts
               const hasOverlap = sheetBookings.some(slot => {
@@ -185,9 +186,38 @@ exports.matchProviders = async (req, res) => {
                 return slot.startTime < endTimeWindow && slot.endTime > startTimeWindow;
               });
 
+              // --- DYNAMICALLY COMPUTE AVAILABLE SLOTS ON TARGET DAY ---
+              const targetDateStr = reqTime.toISOString().split('T')[0];
+              const standardSlots = [
+                { start: '09:00', end: '11:00', label: '09:00 AM - 11:00 AM' },
+                { start: '11:00', end: '13:00', label: '11:00 AM - 01:00 PM' },
+                { start: '13:00', end: '15:00', label: '01:00 PM - 03:00 PM' },
+                { start: '15:00', end: '17:00', label: '03:00 PM - 05:00 PM' },
+                { start: '17:00', end: '19:00', label: '05:00 PM - 07:00 PM' },
+                { start: '19:00', end: '21:00', label: '07:00 PM - 09:00 PM' }
+              ];
+
+              const availableSlots = standardSlots.filter(slot => {
+                const slotStart = new Date(`${targetDateStr}T${slot.start}:00`);
+                const slotEnd = new Date(`${targetDateStr}T${slot.end}:00`);
+                
+                const slotOverlap = sheetBookings.some(booking => {
+                  const isBusy = booking.status === 'booked' || booking.status === 'blocked';
+                  if (!isBusy) return false;
+                  
+                  const bookingDay = booking.startTime.toISOString().split('T')[0];
+                  if (bookingDay !== targetDateStr) return false;
+                  
+                  return booking.startTime < slotEnd && booking.endTime > slotStart;
+                });
+                
+                return !slotOverlap;
+              }).map(s => s.label);
+
               return {
                 ...provider,
-                available: !hasOverlap
+                available: !hasOverlap,
+                available_slots: availableSlots
               };
             } catch (err) {
               console.error(`[Matching Engine] Google Sheet fetch failed for ${provider.business_name}, falling back to local DB:`, err.message);
@@ -205,20 +235,26 @@ exports.matchProviders = async (req, res) => {
             
             return {
               ...provider,
-              available: !bookedSlots || bookedSlots.length === 0
+              available: !bookedSlots || bookedSlots.length === 0,
+              available_slots: ['09:00 AM - 11:00 AM', '01:00 PM - 03:00 PM', '05:00 PM - 07:00 PM']
             };
           } catch (slotError) {
             console.error(`[Matching Engine] Local slot fetching failed for provider ${provider.id}:`, slotError);
-            return { ...provider, available: true }; // Optimistic fallback
+            return { 
+              ...provider, 
+              available: true,
+              available_slots: ['09:00 AM - 11:00 AM', '11:00 AM - 01:00 PM', '01:00 PM - 03:00 PM', '03:00 PM - 05:00 PM', '05:00 PM - 07:00 PM', '07:00 PM - 09:00 PM']
+            };
           }
         });
 
         matchingProviders = await Promise.all(availabilityPromises);
       } else {
-        // Assume available if no time is checked
+        // Assume available if no time is checked, return all slots free
         matchingProviders = matchingProviders.map(provider => ({
           ...provider,
-          available: true
+          available: true,
+          available_slots: ['09:00 AM - 11:00 AM', '11:00 AM - 01:00 PM', '01:00 PM - 03:00 PM', '03:00 PM - 05:00 PM', '05:00 PM - 07:00 PM', '07:00 PM - 09:00 PM']
         }));
       }
 
@@ -248,9 +284,13 @@ exports.matchProviders = async (req, res) => {
           lng: pLng,
           location: provider.shop_address || "Karachi",
           distance: distance,
-          available: provider.available !== undefined ? provider.available : true
+          available: provider.available !== undefined ? provider.available : true,
+          available_slots: provider.available_slots || []
         };
       });
+
+      // Filter out completely unavailable providers (if available is false)
+      matchingProviders = matchingProviders.filter(provider => provider.available !== false);
 
       // 5. Rank: Availability (available first), Proximity (closest first), Rating (highest rating first)
       matchingProviders.sort((a, b) => {

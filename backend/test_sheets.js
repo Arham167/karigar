@@ -19,7 +19,10 @@ async function test() {
     const response = await googleSheets.appendBookingToSheet(TEST_SPREADSHEET_ID, {
       confirmedTime: new Date().toISOString(),
       buyerName: "Test Buyer",
-      serviceType: "AC Maintenance Test"
+      serviceType: "AC Maintenance Test",
+      location: "Gulshan-e-Iqbal Test",
+      sellerId: "ssssssss-ssss-4sss-8sss-ssssssssssss",
+      sellerBusinessName: "Bilal Plumber Services"
     });
     console.log("✅ Success! Booking synced!");
   } catch (err) {

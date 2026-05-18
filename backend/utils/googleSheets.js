@@ -57,9 +57,10 @@ function parseSheetDateTime(dateStr, timeStr) {
 /**
  * Fetch schedule rows from a seller's Google Sheet and parse them into standardized objects
  * @param {string} spreadsheetId 
- * @param {string} range (Default to 'Sheet1!A2:F100')
+ * @param {string} range (Default to 'Sheet1!A2:I100')
+ * @param {string} sellerId (Optional: filter rows for this specific seller in shared sheet)
  */
-async function fetchSellerCalendar(spreadsheetId, range = 'Sheet1!A2:F100') {
+async function fetchSellerCalendar(spreadsheetId, range = 'Sheet1!A2:I100', sellerId = null) {
   try {
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
@@ -90,10 +91,20 @@ async function fetchSellerCalendar(spreadsheetId, range = 'Sheet1!A2:F100') {
           endTime,
           clientName: row[3] || 'N/A',
           serviceType: row[4] || 'N/A',
-          status: (row[5] || 'Booked').toLowerCase(), // e.g., "booked", "blocked", "available"
+          location: row[5] || 'Karachi',
+          status: (row[6] || 'Booked').toLowerCase(), // e.g., "booked", "blocked", "available"
+          sellerId: row[7] || null,
+          sellerBusinessName: row[8] || null,
         };
       })
-      .filter(item => item !== null);
+      .filter(item => {
+        if (item === null) return false;
+        // If a specific sellerId is requested, filter out rows belonging to other sellers
+        if (sellerId && item.sellerId && String(item.sellerId).trim() !== String(sellerId).trim()) {
+          return false;
+        }
+        return true;
+      });
   } catch (error) {
     console.error(`[Google Sheets Service] Error reading spreadsheet ${spreadsheetId}:`, error.message);
     throw error;
@@ -124,7 +135,10 @@ async function appendBookingToSheet(spreadsheetId, booking) {
         endStr,
         booking.buyerName || 'Client via Karigar',
         booking.serviceType || 'Service Call',
-        'Booked'
+        booking.location || 'Karachi',
+        'Booked',
+        booking.sellerId || '',
+        booking.sellerBusinessName || ''
       ]
     ];
     

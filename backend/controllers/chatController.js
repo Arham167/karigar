@@ -281,15 +281,17 @@ exports.agreeToBook = async (req, res) => {
       // Run async in background so we don't block the API response
       (async () => {
         try {
-          // Fetch provider profile and sheet configurations
-          const { data: provider } = await supabase
-            .from("providers")
-            .select("google_sheet_id, use_sheets_crm, business_name")
-            .eq("user_id", finalBooking.provider_id || finalBooking.seller_id)
-            .single();
+          const SPREADSHEET_ID = process.env.SHARED_GOOGLE_SHEET_ID;
 
-          if (provider && provider.use_sheets_crm && provider.google_sheet_id) {
-            console.log(`[Chat Controller] Syncing confirmed booking to Google Sheet for ${provider.business_name}`);
+          if (SPREADSHEET_ID) {
+            // Fetch provider profile to get business_name
+            const { data: provider } = await supabase
+              .from("providers")
+              .select("business_name")
+              .eq("id", finalBooking.seller_id || finalBooking.provider_id)
+              .single();
+
+            console.log(`[Chat Controller] Syncing confirmed booking to Google Sheet for ${provider ? provider.business_name : 'Seller'}`);
             
             // Get buyer's name for client information
             const { data: buyerProfile } = await supabase
@@ -298,11 +300,14 @@ exports.agreeToBook = async (req, res) => {
               .eq("id", finalBooking.buyer_id)
               .single();
 
-            await googleSheets.appendBookingToSheet(provider.google_sheet_id, {
+            await googleSheets.appendBookingToSheet(SPREADSHEET_ID, {
               confirmedTime: finalBooking.confirmed_time || new Date(),
               requestedTime: finalBooking.requested_time || new Date(),
               buyerName: buyerProfile ? buyerProfile.name : "Client via Karigar",
-              serviceType: finalBooking.service_type || "Service Request"
+              serviceType: finalBooking.service_type || "Service Request",
+              location: finalBooking.location || "Karachi",
+              sellerId: finalBooking.seller_id || finalBooking.provider_id,
+              sellerBusinessName: provider ? provider.business_name : "Professional Karigar"
             });
           }
         } catch (syncErr) {
