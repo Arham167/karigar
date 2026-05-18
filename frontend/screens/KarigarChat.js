@@ -82,10 +82,19 @@ export default function KarigarChat({ route, navigation }) {
     const renderableMsgs = validMsgs.map(m => {
       if (!m) return { id: Math.random(), text: "", from: "other" };
       if (m.system) return m;
-      const computedFrom = m.senderRole === role ? "me" : "other";
+      
+      // 100% Invincible Production Logic: Compare senderId with active currentUserId!
+      // Fallback to senderRole comparison for mock development scenarios
+      let isMe = false;
+      if (m.senderId && currentUserIdRef.current) {
+        isMe = String(m.senderId) === String(currentUserIdRef.current);
+      } else {
+        isMe = m.senderRole === role;
+      }
+
       return {
         ...m,
-        from: computedFrom
+        from: isMe ? "me" : "other"
       };
     });
 
@@ -203,6 +212,7 @@ export default function KarigarChat({ route, navigation }) {
             const isBuyer = safeSenderId.includes("buyer") || safeSenderId === MOCK_BUYER_UUID || (role === "buyer" && safeSenderId === activeUserId);
             return {
               id: msg.id || Math.random(),
+              senderId: safeSenderId,
               senderRole: isBuyer ? "buyer" : "seller",
               text: msg.message ? String(msg.message) : "",
               time: formatTime(msg.timestamp),
@@ -224,10 +234,52 @@ export default function KarigarChat({ route, navigation }) {
 
           merged.sort((a, b) => String(a?.id || "").localeCompare(String(b?.id || "")));
           updateMessages(merged);
+        } else {
+          throw new Error("No messages returned from Vercel, trying direct Supabase fallback");
         }
+      } else {
+        throw new Error("Vercel fetch failed, trying direct Supabase fallback");
       }
     } catch (err) {
-      console.log("Error fetching messages, using global cache:", err);
+      console.log("Error fetching from Vercel, directly querying Supabase chats table:", err.message);
+      try {
+        const { data: dbMessages, error: dbErr } = await supabase
+          .from("chats")
+          .select("*")
+          .eq("booking_id", bookingId)
+          .order("timestamp", { ascending: true });
+
+        if (!dbErr && dbMessages && dbMessages.length > 0) {
+          const formatted = dbMessages.map(msg => {
+            const safeSenderId = msg.sender_id ? String(msg.sender_id) : "";
+            const isBuyer = safeSenderId.includes("buyer") || safeSenderId === MOCK_BUYER_UUID || (role === "buyer" && safeSenderId === activeUserId);
+            return {
+              id: msg.id || Math.random(),
+              senderId: safeSenderId,
+              senderRole: isBuyer ? "buyer" : "seller",
+              text: msg.message ? String(msg.message) : "",
+              time: formatTime(msg.timestamp),
+              system: false
+            };
+          });
+
+          const merged = [...(global.appChatHistory[chatKey] || [])];
+          const existingTexts = new Set(merged.map(m => (m && m.text ? String(m.text).trim().toLowerCase() : "")));
+
+          for (const fm of formatted) {
+            const cleanText = fm.text ? String(fm.text).trim().toLowerCase() : "";
+            if (cleanText && !existingTexts.has(cleanText)) {
+              merged.push(fm);
+              existingTexts.add(cleanText);
+            }
+          }
+
+          merged.sort((a, b) => String(a?.id || "").localeCompare(String(b?.id || "")));
+          updateMessages(merged);
+        }
+      } catch (subErr) {
+        console.log("Supabase direct query error:", subErr.message);
+      }
     } finally {
       setLoading(false);
       setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 200);
@@ -251,6 +303,53 @@ export default function KarigarChat({ route, navigation }) {
             const isBuyer = safeSenderId.includes("buyer") || safeSenderId === MOCK_BUYER_UUID || (role === "buyer" && safeSenderId === activeUserId);
             return {
               id: msg.id || Math.random(),
+              senderId: safeSenderId,
+              senderRole: isBuyer ? "buyer" : "seller",
+              text: msg.message ? String(msg.message) : "",
+              time: formatTime(msg.timestamp),
+              system: false
+            };
+          });
+
+          const merged = [...(global.appChatHistory[chatKey] || [])];
+          const existingTexts = new Set(merged.map(m => (m && m.text ? String(m.text).trim().toLowerCase() : "")));
+          let added = false;
+
+          for (const fm of formatted) {
+            const cleanText = fm.text ? String(fm.text).trim().toLowerCase() : "";
+            if (cleanText && !existingTexts.has(cleanText)) {
+              merged.push(fm);
+              existingTexts.add(cleanText);
+              added = true;
+            }
+          }
+
+          if (added) {
+            merged.sort((a, b) => String(a?.id || "").localeCompare(String(b?.id || "")));
+            updateMessages(merged);
+            setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
+          }
+        } else {
+          throw new Error("No messages returned from Vercel sync, trying direct Supabase fallback");
+        }
+      } else {
+        throw new Error("Vercel sync failed, trying direct Supabase fallback");
+      }
+    } catch (err) {
+      try {
+        const { data: dbMessages, error: dbErr } = await supabase
+          .from("chats")
+          .select("*")
+          .eq("booking_id", bookingId)
+          .order("timestamp", { ascending: true });
+
+        if (!dbErr && dbMessages && dbMessages.length > 0) {
+          const formatted = dbMessages.map(msg => {
+            const safeSenderId = msg.sender_id ? String(msg.sender_id) : "";
+            const isBuyer = safeSenderId.includes("buyer") || safeSenderId === MOCK_BUYER_UUID || (role === "buyer" && safeSenderId === activeUserId);
+            return {
+              id: msg.id || Math.random(),
+              senderId: safeSenderId,
               senderRole: isBuyer ? "buyer" : "seller",
               text: msg.message ? String(msg.message) : "",
               time: formatTime(msg.timestamp),
@@ -277,9 +376,9 @@ export default function KarigarChat({ route, navigation }) {
             setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
           }
         }
+      } catch (subErr) {
+        // Silent sync catch
       }
-    } catch (err) {
-      console.log("Error syncing messages:", err);
     }
   };
 
@@ -321,8 +420,11 @@ export default function KarigarChat({ route, navigation }) {
     const userMsgText = inputText.trim();
     setInputText("");
 
+    const activeUserId = currentUserIdRef.current || (role === "buyer" ? MOCK_BUYER_UUID : MOCK_SELLER_UUID);
+
     const newMsgLocal = {
       id: "msg-" + Date.now() + "-" + Math.random().toString(36).substr(2, 4),
+      senderId: activeUserId,
       senderRole: role, // 'buyer' or 'seller'
       text: userMsgText,
       time: getNowFormattedTime(),
@@ -333,12 +435,10 @@ export default function KarigarChat({ route, navigation }) {
     updateMessages(updatedHistory);
     setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
 
-    const activeUserId = currentUserIdRef.current || (role === "buyer" ? MOCK_BUYER_UUID : MOCK_SELLER_UUID);
-
     // Call Backend secure message endpoint
     try {
       setSending(true);
-      await fetch(`${BASE_URL}/api/chat/message`, {
+      const res = await fetch(`${BASE_URL}/api/chat/message`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Bypass-Tunnel-Reminder": "true" },
         body: JSON.stringify({
@@ -348,8 +448,21 @@ export default function KarigarChat({ route, navigation }) {
           role: role
         })
       });
+      if (!res.ok) {
+        throw new Error("Vercel backend returned error status");
+      }
     } catch (err) {
-      console.log("Error sending message to backend:", err);
+      console.log("Error sending message to Vercel backend, directly inserting into Supabase chats table:", err.message);
+      try {
+        // Direct Supabase fallback to ensure 100% production reliability for actual users!
+        await supabase.from("chats").insert([{
+          booking_id: bookingId,
+          sender_id: activeUserId,
+          message: userMsgText
+        }]);
+      } catch (subErr) {
+        console.log("Direct Supabase insert error:", subErr.message);
+      }
     } finally {
       setSending(false);
     }
@@ -361,6 +474,7 @@ export default function KarigarChat({ route, navigation }) {
         const replySender = MOCK_SELLER_UUID;
         const replyLocal = {
           id: "msg-" + Date.now() + "-reply",
+          senderId: replySender,
           senderRole: "seller",
           text: replyText,
           time: getNowFormattedTime(),

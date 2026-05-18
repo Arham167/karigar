@@ -160,7 +160,7 @@ exports.sendMessage = async (req, res) => {
     // 1. Verify that the booking exists
     const { data: booking, error: bookingError } = await supabase
       .from("bookings")
-      .select("id, buyer_id, seller_id")
+      .select("id, buyer_id, provider_id")
       .eq("id", normId)
       .single();
 
