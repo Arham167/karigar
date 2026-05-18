@@ -59,8 +59,9 @@ function parseSheetDateTime(dateStr, timeStr) {
  * @param {string} spreadsheetId 
  * @param {string} range (Default to 'Sheet1!A2:I100')
  * @param {string} sellerId (Optional: filter rows for this specific seller in shared sheet)
+ * @param {string} sellerBusinessName (Optional: filter rows using business name for robust manual typing support)
  */
-async function fetchSellerCalendar(spreadsheetId, range = 'Sheet1!A2:I100', sellerId = null) {
+async function fetchSellerCalendar(spreadsheetId, range = 'Sheet1!A2:I100', sellerId = null, sellerBusinessName = null) {
   try {
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
@@ -99,9 +100,30 @@ async function fetchSellerCalendar(spreadsheetId, range = 'Sheet1!A2:I100', sell
       })
       .filter(item => {
         if (item === null) return false;
-        // If a specific sellerId is requested, filter out rows belonging to other sellers
-        if (sellerId && item.sellerId && String(item.sellerId).trim() !== String(sellerId).trim()) {
-          return false;
+        
+        // If a specific sellerId is requested, filter rows belonging to other sellers in robust way
+        if (sellerId) {
+          const cleanSellerId = String(sellerId).trim().toLowerCase();
+          const cleanItemSellerId = item.sellerId ? String(item.sellerId).trim().toLowerCase() : '';
+          const cleanItemBizName = item.sellerBusinessName ? String(item.sellerBusinessName).trim().toLowerCase() : '';
+          const cleanBizName = sellerBusinessName ? String(sellerBusinessName).trim().toLowerCase() : '';
+
+          // 1. Direct UUID match
+          const uuidMatch = cleanItemSellerId === cleanSellerId;
+
+          // 2. Business name matches the row's business name
+          const bizNameMatch = cleanBizName && cleanItemBizName && (
+            cleanItemBizName.includes(cleanBizName) || cleanBizName.includes(cleanItemBizName)
+          );
+
+          // 3. User typed business name in the sellerId column instead of UUID
+          const idBizNameMatch = cleanBizName && cleanItemSellerId && (
+            cleanItemSellerId.includes(cleanBizName) || cleanBizName.includes(cleanItemSellerId)
+          );
+
+          if (!uuidMatch && !bizNameMatch && !idBizNameMatch) {
+            return false;
+          }
         }
         return true;
       });

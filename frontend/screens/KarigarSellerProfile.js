@@ -993,6 +993,10 @@ const styles = StyleSheet.create({
   },
   // Sticky Footer
   footerSticky: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
     backgroundColor: "white",
     paddingHorizontal: 20,
     paddingTop: 14,

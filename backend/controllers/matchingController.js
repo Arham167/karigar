@@ -177,7 +177,7 @@ exports.matchProviders = async (req, res) => {
           if (SPREADSHEET_ID) {
             try {
               console.log(`[Matching Engine] Reading live calendar from Google Sheet for provider: ${provider.business_name}`);
-              const sheetBookings = await googleSheets.fetchSellerCalendar(SPREADSHEET_ID, 'Sheet1!A2:I100', provider.id);
+              const sheetBookings = await googleSheets.fetchSellerCalendar(SPREADSHEET_ID, 'Sheet1!A2:I100', provider.id, provider.business_name);
               
               // Overlap check: Slot starts before window ends, and ends after window starts
               const hasOverlap = sheetBookings.some(slot => {

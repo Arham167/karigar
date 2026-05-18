@@ -673,11 +673,10 @@ export default function KarigarChat({ route, navigation }) {
     try {
       setLoading(true);
 
-      if (bookingId && !String(bookingId).startsWith("mock-booking")) {
         const { error } = await supabase
           .from("bookings")
           .update({
-            status: "accepted",
+            status: "confirmed",
             confirmed_time: new Date().toISOString(),
             price: negotiationPrice
           })
@@ -686,7 +685,7 @@ export default function KarigarChat({ route, navigation }) {
         if (error) throw error;
       }
 
-      setBookingStatus("accepted");
+      setBookingStatus("confirmed");
       setShowSuccessModal(true);
 
     } catch (err) {

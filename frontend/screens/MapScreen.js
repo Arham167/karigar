@@ -667,7 +667,7 @@ export default function MapScreen({ navigation }) {
                   location: matchedLocation,
                   requested_time: new Date().toISOString(),
                   price: finalPrice,
-                  status: "accepted",
+                  status: "confirmed",
                 },
               ]);
 
