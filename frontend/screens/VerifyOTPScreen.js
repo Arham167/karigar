@@ -9,6 +9,8 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  TouchableWithoutFeedback,
+  Keyboard,
 } from "react-native";
 import Svg, { Path, Rect } from "react-native-svg";
 import { useFonts, DMSans_400Regular, DMSans_700Bold } from "@expo-google-fonts/dm-sans";
@@ -85,51 +87,55 @@ export default function VerifyOTPScreen({ navigation, route }) {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.container}
-      >
-        <View style={styles.content}>
-          <View style={styles.iconContainer}>
-            <IconLock />
-          </View>
-          <Text style={styles.title}>Verify OTP</Text>
-          <Text style={styles.subtitle}>Enter the 6-digit code you set in Supabase for {phoneNumber}</Text>
-          
-          <TextInput
-            style={styles.input}
-            value={code}
-            onChangeText={setCode}
-            placeholder="000000"
-            placeholderTextColor="#a0b8aa"
-            keyboardType="number-pad"
-            maxLength={6}
-            autoFocus={true}
-          />
-
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-
-          <TouchableOpacity 
-            style={[styles.button, loading && { opacity: 0.7 }]} 
-            onPress={handleVerify} 
-            disabled={loading}
-            activeOpacity={0.8}
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <View style={{ flex: 1 }}>
+          <KeyboardAvoidingView 
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={styles.container}
           >
-            {loading ? (
-              <ActivityIndicator color="white" />
-            ) : (
-              <Text style={styles.buttonText}>Verify & Continue</Text>
-            )}
-          </TouchableOpacity>
+            <View style={styles.content}>
+              <View style={styles.iconContainer}>
+                <IconLock />
+              </View>
+              <Text style={styles.title}>Verify OTP</Text>
+              <Text style={styles.subtitle}>Enter the 6-digit code you set in Supabase for {phoneNumber}</Text>
+              
+              <TextInput
+                style={styles.input}
+                value={code}
+                onChangeText={setCode}
+                placeholder="000000"
+                placeholderTextColor="#a0b8aa"
+                keyboardType="number-pad"
+                maxLength={6}
+                autoFocus={true}
+              />
 
-          <TouchableOpacity 
-            style={styles.resendButton} 
-            onPress={() => navigation.goBack()}
-          >
-            <Text style={styles.resendText}>Wrong number? Go back</Text>
-          </TouchableOpacity>
+              {error ? <Text style={styles.error}>{error}</Text> : null}
+
+              <TouchableOpacity 
+                style={[styles.button, loading && { opacity: 0.7 }]} 
+                onPress={handleVerify} 
+                disabled={loading}
+                activeOpacity={0.8}
+              >
+                {loading ? (
+                  <ActivityIndicator color="white" />
+                ) : (
+                  <Text style={styles.buttonText}>Verify & Continue</Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.resendButton} 
+                onPress={() => navigation.goBack()}
+              >
+                <Text style={styles.resendText}>Wrong number? Go back</Text>
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
         </View>
-      </KeyboardAvoidingView>
+      </TouchableWithoutFeedback>
     </SafeAreaView>
   );
 }

@@ -463,19 +463,14 @@ export default function KarigarSellerProfile({ provider, onClose, onBook, onChat
 
         <View style={styles.footerActions}>
           <TouchableOpacity 
-            style={styles.chatIconButton} 
+            style={styles.hireCtaButton} 
             activeOpacity={0.8}
             onPress={() => onChat({ ...seller, selectedSlot, dynamicPrice: totalQuote })}
           >
-            <MessageSquare size={20} color="#065F46" />
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={styles.hireCtaButton} 
-            activeOpacity={0.8}
-            onPress={() => onBook({ ...seller, selectedSlot, dynamicPrice: totalQuote })}
-          >
-            <Text style={styles.hireCtaText}>Book Now</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <MessageSquare size={18} color="white" />
+              <Text style={styles.hireCtaText}>Chat to Book</Text>
+            </View>
           </TouchableOpacity>
         </View>
       </View>

@@ -108,6 +108,7 @@ export default function KarigarChat({ route, navigation }) {
 
   // Negotiation states
   const [buyerAgreed, setBuyerAgreed] = useState(false);
+  const [otherParticipantAvatar, setOtherParticipantAvatar] = useState(null);
   const [sellerAgreed, setSellerAgreed] = useState(false);
   const [bookingStatus, setBookingStatus] = useState("pending");
   const [bothAgreed, setBothAgreed] = useState(false);
@@ -181,11 +182,45 @@ export default function KarigarChat({ route, navigation }) {
           if (data.booking) {
             setBookingStatus(data.booking.status);
             setNegotiationPrice(parseFloat(data.booking.price || dynamicQuote));
+            loadOtherParticipantProfile(data.booking);
           }
         }
       }
     } catch (err) {
       console.log("Error checking agreement status:", err);
+    }
+  };
+
+  const loadOtherParticipantProfile = async (booking) => {
+    if (!booking) return;
+    try {
+      if (role === "buyer") {
+        // Fetch provider profile image
+        if (booking.seller_id) {
+          const { data, error } = await supabase
+            .from("providers")
+            .select("profile_image_url")
+            .eq("id", booking.seller_id)
+            .single();
+          if (!error && data?.profile_image_url) {
+            setOtherParticipantAvatar(data.profile_image_url);
+          }
+        }
+      } else {
+        // Fetch buyer profile image
+        if (booking.buyer_id) {
+          const { data, error } = await supabase
+            .from("profiles")
+            .select("profile_image_url")
+            .eq("id", booking.buyer_id)
+            .single();
+          if (!error && data?.profile_image_url) {
+            setOtherParticipantAvatar(data.profile_image_url);
+          }
+        }
+      }
+    } catch (err) {
+      console.log("Error loading other participant profile:", err);
     }
   };
 
@@ -628,7 +663,7 @@ export default function KarigarChat({ route, navigation }) {
 
           <View style={styles.avatarContainer}>
             <Image
-              source={{ uri: role === "buyer" ? (provider?.profile_image_url || "https://images.unsplash.com/photo-1540569014015-19a7be504e3a?q=80&w=200") : "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200" }}
+              source={{ uri: otherParticipantAvatar || (role === "buyer" ? (provider?.profile_image_url || "https://images.unsplash.com/photo-1540569014015-19a7be504e3a?q=80&w=200") : "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200") }}
               style={styles.avatar}
             />
             <View style={styles.onlineDot} />

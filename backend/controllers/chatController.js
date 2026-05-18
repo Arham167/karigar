@@ -6,24 +6,30 @@ global.chatMemoryStore = global.chatMemoryStore || {};
 
 const MOCK_BUYER_UUID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const MOCK_SELLER_UUID = "ssssssss-ssss-4sss-8sss-ssssssssssss";
-const MOCK_BOOKING_1_UUID = "11111111-1111-4111-8111-111111111111";
-const MOCK_BOOKING_2_UUID = "22222222-2222-4222-8222-22222222222";
-const MOCK_BOOKING_3_UUID = "33333333-3333-4333-8333-333333333333";
+const MOCK_BOOKING_1_ID = 9991;
+const MOCK_BOOKING_2_ID = 9992;
+const MOCK_BOOKING_3_ID = 9993;
 
 function normalizeBookingId(id) {
-  if (!id) return MOCK_BOOKING_1_UUID;
-  if (id.includes("mock-booking-1") || id.includes("mock-1")) return MOCK_BOOKING_1_UUID;
-  if (id.includes("mock-booking-2") || id.includes("mock-2")) return MOCK_BOOKING_2_UUID;
-  if (id.includes("mock-booking-3") || id.includes("mock-3")) return MOCK_BOOKING_3_UUID;
-  if (id.startsWith("mock-")) return MOCK_BOOKING_1_UUID;
+  if (id === null || id === undefined) return MOCK_BOOKING_1_ID;
+  const strId = String(id);
+  if (strId.includes("mock-booking-1") || strId.includes("mock-1")) return MOCK_BOOKING_1_ID;
+  if (strId.includes("mock-booking-2") || strId.includes("mock-2")) return MOCK_BOOKING_2_ID;
+  if (strId.includes("mock-booking-3") || strId.includes("mock-3")) return MOCK_BOOKING_3_ID;
+  if (strId.startsWith("mock-")) return MOCK_BOOKING_1_ID;
+  
+  if (/^\d+$/.test(strId)) {
+    return parseInt(strId, 10);
+  }
   return id;
 }
 
 function normalizeUserId(id, role = "buyer") {
   if (!id) return role === "buyer" ? MOCK_BUYER_UUID : MOCK_SELLER_UUID;
-  if (id.includes("buyer")) return MOCK_BUYER_UUID;
-  if (id.includes("seller")) return MOCK_SELLER_UUID;
-  if (id.startsWith("mock-")) return role === "buyer" ? MOCK_BUYER_UUID : MOCK_SELLER_UUID;
+  const strId = String(id);
+  if (strId.includes("buyer")) return MOCK_BUYER_UUID;
+  if (strId.includes("seller")) return MOCK_SELLER_UUID;
+  if (strId.startsWith("mock-")) return role === "buyer" ? MOCK_BUYER_UUID : MOCK_SELLER_UUID;
   return id;
 }
 
@@ -31,16 +37,16 @@ async function ensureMockRecordsExist() {
   if (global.mockRecordsSeeded) return;
 
   try {
-    // 1. Ensure mock buyer exists in users table
-    const { data: buyer } = await supabase.from("users").select("id").eq("id", MOCK_BUYER_UUID).single();
+    // 1. Ensure mock buyer exists in profiles table
+    const { data: buyer } = await supabase.from("profiles").select("id").eq("id", MOCK_BUYER_UUID).single();
     if (!buyer) {
-      await supabase.from("users").insert([{ id: MOCK_BUYER_UUID, phone: "03001234567", role: "buyer", name: "Arham Noman (Mock Buyer)" }]);
+      await supabase.from("profiles").insert([{ id: MOCK_BUYER_UUID, phone_number: "03001234567", role: "buyer", name: "Arham Noman (Mock Buyer)" }]);
     }
 
-    // 2. Ensure mock seller exists in users table
-    const { data: sellerUser } = await supabase.from("users").select("id").eq("id", MOCK_SELLER_UUID).single();
+    // 2. Ensure mock seller exists in profiles table
+    const { data: sellerUser } = await supabase.from("profiles").select("id").eq("id", MOCK_SELLER_UUID).single();
     if (!sellerUser) {
-      await supabase.from("users").insert([{ id: MOCK_SELLER_UUID, phone: "03007654321", role: "seller", name: "Bilal Plumber (Mock Seller)" }]);
+      await supabase.from("profiles").insert([{ id: MOCK_SELLER_UUID, phone_number: "03007654321", role: "seller", name: "Bilal Plumber (Mock Seller)" }]);
     }
 
     // 3. Ensure mock seller exists in providers table
@@ -51,9 +57,9 @@ async function ensureMockRecordsExist() {
 
     // 4. Ensure mock bookings exist in bookings table
     const mockBookings = [
-      { id: MOCK_BOOKING_1_UUID, buyer_id: MOCK_BUYER_UUID, provider_id: MOCK_SELLER_UUID, service_type: "Ceiling Fan & Board Wiring", status: "pending", price: 800 },
-      { id: MOCK_BOOKING_2_UUID, buyer_id: MOCK_BUYER_UUID, provider_id: MOCK_SELLER_UUID, service_type: "Pipe Leakage Repair", status: "pending", price: 1200 },
-      { id: MOCK_BOOKING_3_UUID, buyer_id: MOCK_BUYER_UUID, provider_id: MOCK_SELLER_UUID, service_type: "AC Servicing & Gas Refill", status: "pending", price: 2500 }
+      { id: MOCK_BOOKING_1_ID, buyer_id: MOCK_BUYER_UUID, seller_id: MOCK_SELLER_UUID, service_type: "Ceiling Fan & Board Wiring", status: "pending", price: 800 },
+      { id: MOCK_BOOKING_2_ID, buyer_id: MOCK_BUYER_UUID, seller_id: MOCK_SELLER_UUID, service_type: "Pipe Leakage Repair", status: "pending", price: 1200 },
+      { id: MOCK_BOOKING_3_ID, buyer_id: MOCK_BUYER_UUID, seller_id: MOCK_SELLER_UUID, service_type: "AC Servicing & Gas Refill", status: "pending", price: 2500 }
     ];
 
     for (const mb of mockBookings) {
@@ -64,7 +70,7 @@ async function ensureMockRecordsExist() {
     }
 
     global.mockRecordsSeeded = true;
-    console.log("[Mock Seeder] Successfully verified/seeded mock users and bookings in Supabase.");
+    console.log("[Mock Seeder] Successfully verified/seeded mock profiles and bookings in Supabase.");
   } catch (err) {
     console.error("[Mock Seeder] Error seeding mock records:", err.message);
   }
@@ -147,12 +153,12 @@ exports.sendMessage = async (req, res) => {
   global.chatMemoryStore[normId].push(newMsgObj);
 
   try {
-    // Ensure sender exists in public.users table to prevent foreign key violation!
-    const { data: existingUser } = await supabase.from("users").select("id").eq("id", normSenderId).single();
+    // Ensure sender exists in public.profiles table to prevent foreign key violation!
+    const { data: existingUser } = await supabase.from("profiles").select("id").eq("id", normSenderId).single();
     if (!existingUser) {
-      await supabase.from("users").insert([{
+      await supabase.from("profiles").insert([{
         id: normSenderId,
-        phone: "phone-" + normSenderId.substr(0, 8),
+        phone_number: "phone-" + normSenderId.substr(0, 8),
         role: req.body.role || "buyer",
         name: req.body.senderName || "App User"
       }]);
@@ -161,7 +167,7 @@ exports.sendMessage = async (req, res) => {
     // 1. Verify that the booking exists
     const { data: booking, error: bookingError } = await supabase
       .from("bookings")
-      .select("id, buyer_id, provider_id")
+      .select("id, buyer_id, seller_id")
       .eq("id", normId)
       .single();
 
@@ -211,12 +217,14 @@ exports.agreeToBook = async (req, res) => {
     return res.status(400).json({ success: false, error: "Missing required fields." });
   }
 
+  const normId = normalizeBookingId(bookingId);
+
   try {
     // Fetch current booking status
     const { data: booking, error: fetchError } = await supabase
       .from("bookings")
       .select("*")
-      .eq("id", bookingId)
+      .eq("id", normId)
       .single();
 
     if (fetchError || !booking) {
@@ -240,7 +248,7 @@ exports.agreeToBook = async (req, res) => {
     const { data: updatedBooking, error: updateError } = await supabase
       .from("bookings")
       .update(updates)
-      .eq("id", bookingId)
+      .eq("id", normId)
       .select();
 
     if (updateError) {
@@ -322,11 +330,13 @@ exports.getAgreementStatus = async (req, res) => {
     return res.status(400).json({ success: false, error: "Booking ID is required." });
   }
 
+  const normId = normalizeBookingId(bookingId);
+
   try {
     const { data: booking, error } = await supabase
       .from("bookings")
       .select("*")
-      .eq("id", bookingId)
+      .eq("id", normId)
       .single();
 
     if (error) {

@@ -36,6 +36,7 @@ import {
   AlertTriangle,
   HelpCircle,
   Wrench,
+  MessageSquare,
 } from "lucide-react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { supabase } from "../utils/supabase";
@@ -201,6 +202,61 @@ export default function MapScreen({ navigation }) {
   // Selected Provider Profile Modal States
   const [selectedProvider, setSelectedProvider] = useState(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
+
+  // Polling for incoming chat notifications (Buyer side)
+  const [lastNotificationCheck, setLastNotificationCheck] = useState(new Date().toISOString());
+  const [inAppNotification, setInAppNotification] = useState(null);
+
+  useEffect(() => {
+    const checkNotificationInterval = setInterval(async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        // Fetch buyer's bookings
+        const { data: userBookings } = await supabase
+          .from("bookings")
+          .select("id, service_type, seller_id, buyer_id")
+          .eq("buyer_id", user.id);
+
+        if (!userBookings || userBookings.length === 0) return;
+
+        const bookingIds = userBookings.map(b => b.id);
+
+        // Fetch any messages for these bookings sent by other users after lastNotificationCheck
+        const { data: newMsgs } = await supabase
+          .from("chats")
+          .select("id, booking_id, sender_id, message, timestamp")
+          .in("booking_id", bookingIds)
+          .neq("sender_id", user.id)
+          .gt("timestamp", lastNotificationCheck)
+          .order("timestamp", { ascending: false });
+
+        if (newMsgs && newMsgs.length > 0) {
+          const latestMsg = newMsgs[0];
+          const matchingBooking = userBookings.find(b => b.id === latestMsg.booking_id);
+
+          setLastNotificationCheck(latestMsg.timestamp);
+          setInAppNotification({
+            id: latestMsg.id,
+            bookingId: latestMsg.booking_id,
+            title: "New Message from Karigar",
+            message: latestMsg.message,
+            booking: matchingBooking
+          });
+
+          // Dismiss after 4 seconds
+          setTimeout(() => {
+            setInAppNotification(prev => prev?.id === latestMsg.id ? null : prev);
+          }, 4000);
+        }
+      } catch (err) {
+        console.log("Error in chat notifications poll:", err);
+      }
+    }, 4500);
+
+    return () => clearInterval(checkNotificationInterval);
+  }, [lastNotificationCheck]);
 
   // Custom Alert Popup State
   const [customAlert, setCustomAlert] = useState({
@@ -372,7 +428,32 @@ export default function MapScreen({ navigation }) {
           .order("created_at", { ascending: false });
 
         if (error) throw error;
-        setBookings(data || []);
+        
+        // Fetch provider profiles to get names
+        const bookingsWithProviders = [...(data || [])];
+        const sellerIds = bookingsWithProviders.filter(b => b.seller_id).map(b => b.seller_id);
+        
+        if (sellerIds.length > 0) {
+          const { data: providersList } = await supabase
+            .from("providers")
+            .select("id, business_name, profile_image_url, specialization")
+            .in("id", sellerIds);
+            
+          const providerMap = {};
+          if (providersList) {
+            providersList.forEach(p => {
+              providerMap[p.id] = p;
+            });
+          }
+          
+          bookingsWithProviders.forEach(b => {
+            if (b.seller_id && providerMap[b.seller_id]) {
+              b.provider = providerMap[b.seller_id];
+            }
+          });
+        }
+        
+        setBookings(bookingsWithProviders);
       }
     } catch (err) {
       console.log("Error loading bookings:", err);
@@ -843,6 +924,34 @@ export default function MapScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
+      {/* Gorgeous In-App Notification Toast */}
+      {inAppNotification && (
+        <TouchableOpacity
+          style={styles.notificationToast}
+          activeOpacity={0.9}
+          onPress={() => {
+            const booking = inAppNotification.booking;
+            setInAppNotification(null);
+            navigation.navigate("KarigarChat", {
+              bookingId: booking.id,
+              booking: booking,
+              role: "buyer",
+              dynamicQuote: booking.price || 1200,
+              buyerName: userName || "Arham N."
+            });
+          }}
+        >
+          <View style={styles.toastHeader}>
+            <MessageSquare size={16} color="#059669" style={{ marginRight: 6 }} />
+            <Text style={styles.toastTitle}>{inAppNotification.title}</Text>
+            <Text style={styles.toastTime}>Just Now</Text>
+          </View>
+          <Text style={styles.toastMessage} numberOfLines={1}>
+            {inAppNotification.message}
+          </Text>
+        </TouchableOpacity>
+      )}
+
       {/* Dynamic Tab Views */}
       {activeTab === "home" && (
         <View style={styles.mapTabContainer}>
@@ -1020,10 +1129,11 @@ export default function MapScreen({ navigation }) {
       )}
 
       {/* Requests Tab */}
+      {/* Requests/Chats Tab */}
       {activeTab === "requests" && (
         <View style={[styles.tabContent, { paddingTop: Math.max(insets.top, 20) }]}>
-          <Text style={styles.tabHeading}>My Requests</Text>
-          <Text style={styles.tabSubheading}>Track your current and previous job postings</Text>
+          <Text style={styles.tabHeading}>My Chats</Text>
+          <Text style={styles.tabSubheading}>Continue secure negotiations with your Karigars</Text>
 
           {loadingBookings ? (
             <View style={styles.tabLoader}>
@@ -1035,57 +1145,94 @@ export default function MapScreen({ navigation }) {
                 source={{ uri: "https://images.unsplash.com/photo-1579208575657-c595a05383b7?q=80&w=400" }} 
                 style={styles.emptyImage}
               />
-              <Text style={styles.emptyText}>No Active Requests</Text>
-              <Text style={styles.emptySubtext}>When you submit a request for a Karigar, it will show up here in real time!</Text>
+              <Text style={styles.emptyText}>No Active Chats</Text>
+              <Text style={styles.emptySubtext}>When you start a chat with a Karigar, it will show up here in real time!</Text>
               <TouchableOpacity 
                 style={styles.emptyCta}
                 onPress={() => setActiveTab("home")}
               >
-                <Text style={styles.emptyCtaText}>Describe a Job Now</Text>
+                <Text style={styles.emptyCtaText}>Find a Karigar Now</Text>
               </TouchableOpacity>
             </ScrollView>
           ) : (
             <ScrollView contentContainerStyle={styles.listContainer} showsVerticalScrollIndicator={false}>
-              {bookings.map((booking) => (
-                <View key={booking.id} style={styles.bookingCard}>
-                  <View style={styles.bookingCardHeader}>
-                    <View style={styles.bookingIconBadge}>
-                      <MapPin size={24} color="#065F46" />
-                    </View>
-                    <View style={styles.bookingHeaderInfo}>
-                      <Text style={styles.bookingTitle}>{booking.service_type}</Text>
-                      <Text style={styles.bookingTime}>
-                        {new Date(booking.requested_time).toLocaleDateString()} at{" "}
-                        {new Date(booking.requested_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </Text>
-                    </View>
-                    <View style={[
-                      styles.statusBadge, 
-                      booking.status === "pending" ? styles.statusPending : styles.statusSuccess
-                    ]}>
-                      <Text style={[
-                        styles.statusText, 
-                        booking.status === "pending" ? styles.statusTextPending : styles.statusTextSuccess
+              {bookings.map((booking) => {
+                const sellerName = booking.provider?.business_name || "Expert Karigar";
+                const sellerAvatar = booking.provider?.profile_image_url || "https://images.unsplash.com/photo-1540569014015-19a7be504e3a?q=80&w=200";
+                const sellerSpec = booking.provider?.specialization || booking.service_type;
+
+                return (
+                  <View key={booking.id} style={styles.bookingCard}>
+                    <View style={styles.bookingCardHeader}>
+                      <Image source={{ uri: sellerAvatar }} style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: "#F3F4F6", marginRight: 12 }} />
+                      <View style={styles.bookingHeaderInfo}>
+                        <Text style={styles.bookingTitle}>{sellerName}</Text>
+                        <Text style={styles.bookingTime}>
+                          {sellerSpec} • {new Date(booking.created_at || booking.requested_time).toLocaleDateString()}
+                        </Text>
+                      </View>
+                      <View style={[
+                        styles.statusBadge, 
+                        booking.status === "pending" ? styles.statusPending : styles.statusSuccess
                       ]}>
-                        {booking.status.toUpperCase()}
-                      </Text>
+                        <Text style={[
+                          styles.statusText, 
+                          booking.status === "pending" ? styles.statusTextPending : styles.statusTextSuccess
+                        ]}>
+                          {booking.status.toUpperCase()}
+                        </Text>
+                      </View>
                     </View>
-                  </View>
 
-                  <View style={styles.divider} />
+                    <View style={styles.divider} />
 
-                  <View style={styles.bookingBody}>
-                    <View style={styles.bodyRow}>
-                      <Clock size={16} color="#6B7280" />
-                      <Text style={styles.bodyRowText}>Estimated Rate: Rs. {booking.price}</Text>
+                    <View style={styles.bookingBody}>
+                      <View style={styles.bodyRow}>
+                        <Clock size={16} color="#6B7280" style={{ marginRight: 6 }} />
+                        <Text style={styles.bodyRowText}>Agreed Quote: Rs. {booking.price}</Text>
+                      </View>
+                      <View style={styles.bodyRow}>
+                        <MapPin size={16} color="#6B7280" style={{ marginRight: 6 }} />
+                        <Text style={styles.bodyRowText} numberOfLines={1}>{booking.location}</Text>
+                      </View>
                     </View>
-                    <View style={styles.bodyRow}>
-                      <MapPin size={16} color="#6B7280" />
-                      <Text style={styles.bodyRowText} numberOfLines={1}>{booking.location}</Text>
-                    </View>
+
+                    <TouchableOpacity
+                      style={{
+                        backgroundColor: "#ECFDF5",
+                        borderColor: "#A7F3D0",
+                        borderWidth: 1,
+                        borderRadius: 12,
+                        paddingVertical: 10,
+                        alignItems: "center",
+                        marginTop: 12,
+                        flexDirection: "row",
+                        justifyContent: "center",
+                        gap: 6
+                      }}
+                      activeOpacity={0.8}
+                      onPress={() => {
+                        navigation.navigate("KarigarChat", {
+                          bookingId: booking.id,
+                          booking: booking,
+                          provider: booking.provider || {
+                            id: booking.seller_id || "mock-1",
+                            business_name: sellerName,
+                            specialization: sellerSpec,
+                            profile_image_url: sellerAvatar
+                          },
+                          role: "buyer",
+                          dynamicQuote: booking.price,
+                          buyerName: userName || "Arham N."
+                        });
+                      }}
+                    >
+                      <MessageSquare size={16} color="#065F46" />
+                      <Text style={{ fontFamily: "DMSans_700Bold", fontSize: 13, color: "#065F46" }}>Open Chat Inbox</Text>
+                    </TouchableOpacity>
                   </View>
-                </View>
-              ))}
+                );
+              })}
             </ScrollView>
           )}
         </View>
@@ -1163,16 +1310,16 @@ export default function MapScreen({ navigation }) {
             <Text style={[styles.navLabel, activeTab === "home" && styles.activeNavLabel]}>Home</Text>
           </TouchableOpacity>
 
-          {/* Requests Tab */}
+          {/* Requests/Chats Tab */}
           <TouchableOpacity
             style={styles.navItem}
             activeOpacity={0.8}
             onPress={() => setActiveTab("requests")}
           >
             <View style={[styles.navIconBox, activeTab === "requests" && styles.activeIconBox]}>
-              <ClipboardList size={26} color={activeTab === "requests" ? "#10B981" : "#4B5563"} strokeWidth={activeTab === "requests" ? 2.4 : 2.0} />
+              <MessageSquare size={26} color={activeTab === "requests" ? "#10B981" : "#4B5563"} strokeWidth={activeTab === "requests" ? 2.4 : 2.0} />
             </View>
-            <Text style={[styles.navLabel, activeTab === "requests" && styles.activeNavLabel]}>My Requests</Text>
+            <Text style={[styles.navLabel, activeTab === "requests" && styles.activeNavLabel]}>My Chats</Text>
           </TouchableOpacity>
 
           {/* Profile Tab */}
@@ -1953,5 +2100,46 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 11,
     fontWeight: "bold",
+  },
+  notificationToast: {
+    position: "absolute",
+    top: Platform.OS === "ios" ? 50 : 20,
+    left: 16,
+    right: 16,
+    backgroundColor: "white",
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderWidth: 1.5,
+    borderColor: "#065F46",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 8,
+    zIndex: 999,
+  },
+  toastHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  toastTitle: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 12,
+    color: "#1F2937",
+    marginLeft: 6,
+    flex: 1,
+  },
+  toastTime: {
+    fontFamily: "DMSans_500Medium",
+    fontSize: 10,
+    color: "#9CA3AF",
+  },
+  toastMessage: {
+    fontFamily: "DMSans_400Regular",
+    fontSize: 13,
+    color: "#4B5563",
+    lineHeight: 16,
   },
 });

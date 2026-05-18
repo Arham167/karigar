@@ -11,6 +11,8 @@ import {
   Image,
   ActivityIndicator,
   Modal,
+  TouchableWithoutFeedback,
+  Keyboard,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path, Rect, Circle, Polyline, G } from "react-native-svg";
@@ -437,7 +439,14 @@ export default function SellerProfileSetupScreen({ navigation }) {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator={false}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <View style={{ width: "100%" }}>
         <View style={styles.headingContainer}>
           <Text style={styles.title}>Complete your Seller profile</Text>
           <Text style={styles.subtitle}>
@@ -539,7 +548,10 @@ export default function SellerProfileSetupScreen({ navigation }) {
           </Text>
         </View>
 
+        {/* Bottom Spacer */}
         <View style={{ height: 120 }} />
+          </View>
+        </TouchableWithoutFeedback>
       </ScrollView>
 
       <View style={[styles.bottomCta, { paddingBottom: Math.max(insets.bottom, 20) }]}>
