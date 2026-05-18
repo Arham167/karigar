@@ -14,6 +14,7 @@ import {
   ScrollView,
   Alert,
   Modal,
+  SafeAreaView,
   Keyboard,
   TouchableWithoutFeedback,
 } from "react-native";
@@ -1343,23 +1344,25 @@ export default function MapScreen({ navigation }) {
         transparent={false}
         onRequestClose={() => setShowProfileModal(false)}
       >
-        <KarigarSellerProfile
-          provider={selectedProvider}
-          onClose={() => setShowProfileModal(false)}
-          onBook={(provider) => {
-            setShowProfileModal(false);
-            // Delay slightly to allow modal to close smoothly before alert pops
-            setTimeout(() => {
-              handleBookProvider(provider);
-            }, 300);
-          }}
-          onChat={(provider) => {
-            setShowProfileModal(false);
-            setTimeout(() => {
-              handleInitiateChat(provider);
-            }, 300);
-          }}
-        />
+        <SafeAreaView style={{ flex: 1, backgroundColor: "#F7F9F8" }}>
+          <KarigarSellerProfile
+            provider={selectedProvider}
+            onClose={() => setShowProfileModal(false)}
+            onBook={(provider) => {
+              setShowProfileModal(false);
+              // Delay slightly to allow modal to close smoothly before alert pops
+              setTimeout(() => {
+                handleBookProvider(provider);
+              }, 300);
+            }}
+            onChat={(provider) => {
+              setShowProfileModal(false);
+              setTimeout(() => {
+                handleInitiateChat(provider);
+              }, 300);
+            }}
+          />
+        </SafeAreaView>
       </Modal>
 
       {/* Custom Premium Alert Popups */}
