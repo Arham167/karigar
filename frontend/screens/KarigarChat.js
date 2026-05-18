@@ -16,14 +16,14 @@ import {
   Modal,
   Image,
 } from "react-native";
-import { 
-  ArrowLeft, 
-  Send, 
-  ShieldCheck, 
-  Lock, 
-  CheckCircle2, 
-  Clock, 
-  Briefcase, 
+import {
+  ArrowLeft,
+  Send,
+  ShieldCheck,
+  Lock,
+  CheckCircle2,
+  Clock,
+  Briefcase,
   X,
   MapPin,
   Calendar,
@@ -52,7 +52,7 @@ export default function KarigarChat({ route, navigation }) {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [currentUserId, setCurrentUserId] = useState(null);
-  
+
   // Negotiation states
   const [buyerAgreed, setBuyerAgreed] = useState(false);
   const [sellerAgreed, setSellerAgreed] = useState(false);
@@ -107,7 +107,7 @@ export default function KarigarChat({ route, navigation }) {
 
   // Fetch Agreement Status from Backend
   const fetchAgreementStatus = async () => {
-    if (bookingId.startsWith("mock-booking-id")) {
+    if (bookingId.startsWith("mock-booking")) {
       // Local testing fallbacks
       return;
     }
@@ -134,7 +134,7 @@ export default function KarigarChat({ route, navigation }) {
 
   // Fetch Chat Messages from Backend
   const fetchMessages = async () => {
-    if (bookingId.startsWith("mock-booking-id")) {
+    if (bookingId.startsWith("mock-booking")) {
       loadMockMessages();
       setLoading(false);
       return;
@@ -177,7 +177,7 @@ export default function KarigarChat({ route, navigation }) {
 
   // Silently sync messages for polling
   const syncNewMessages = async () => {
-    if (bookingId.startsWith("mock-booking-id")) return;
+    if (bookingId.startsWith("mock-booking")) return;
     try {
       const response = await fetch(`${BASE_URL}/api/chat/messages/${bookingId}`, {
         headers: { "Bypass-Tunnel-Reminder": "true" }
@@ -192,7 +192,7 @@ export default function KarigarChat({ route, navigation }) {
             time: formatTime(msg.timestamp),
             system: false
           }));
-          
+
           // Only update if count changed to prevent jumpiness
           if (formatted.length !== messages.filter(m => !m.system).length) {
             // Re-inject system messages dynamically based on agreement state
@@ -209,41 +209,7 @@ export default function KarigarChat({ route, navigation }) {
 
   // Populate Mock Messages for a gorgeous visual layout instantly
   const loadMockMessages = () => {
-    const firstMsg = role === "buyer" 
-      ? `Hello! I can help with the ${displaySpecialization.toLowerCase()} work. I'll review your requirements.` 
-      : `Hello, thanks for connecting! I need a reliable ${displaySpecialization.toLowerCase()} checkup.`;
-
-    const secondMsg = role === "buyer"
-      ? `Great, thanks. Is the price quote Rs. ${dynamicQuote} for labor?`
-      : `Sure! I can definitely fix that. My base dynamic quote for the labor & arrival fee is Rs. ${dynamicQuote}.`;
-
-    const thirdMsg = role === "buyer"
-      ? `Yes, Rs. ${dynamicQuote} is calculated based on distance and service. I can arrive today around 04:30 PM.`
-      : `That sounds completely reasonable. Will you be available today around 04:30 PM?`;
-
-    setMessages([
-      {
-        id: 1,
-        from: role === "buyer" ? "other" : "me",
-        text: firstMsg,
-        time: "10:15 AM",
-        system: false,
-      },
-      {
-        id: 2,
-        from: role === "buyer" ? "me" : "other",
-        text: secondMsg,
-        time: "10:17 AM",
-        system: false,
-      },
-      {
-        id: 3,
-        from: role === "buyer" ? "other" : "me",
-        text: thirdMsg,
-        time: "10:20 AM",
-        system: false,
-      },
-    ]);
+    setMessages([]);
   };
 
   const formatTime = (isoString) => {
@@ -287,7 +253,7 @@ export default function KarigarChat({ route, navigation }) {
     setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
 
     // Call Backend secure message endpoint
-    if (!bookingId.startsWith("mock-booking-id")) {
+    if (!bookingId.startsWith("mock-booking")) {
       try {
         setSending(true);
         await fetch(`${BASE_URL}/api/chat/message`, {
@@ -310,7 +276,7 @@ export default function KarigarChat({ route, navigation }) {
         const reply = {
           id: Date.now() + 1,
           from: "other",
-          text: role === "buyer" 
+          text: role === "buyer"
             ? "I'm ready! Let's click 'Agree to Book' so we can confirm the schedule."
             : "Awesome! Please click 'Agree to Book' to confirm Rs. " + negotiationPrice + " on your end.",
           time: getNowFormattedTime(),
@@ -325,7 +291,7 @@ export default function KarigarChat({ route, navigation }) {
   // Agree to Book Action (Dynamic quoted price)
   const handleAgreeToBook = async () => {
     const nextAgreedState = role === "buyer" ? true : true;
-    
+
     // Optimistic UI updates
     if (role === "buyer") setBuyerAgreed(true);
     else setSellerAgreed(true);
@@ -339,7 +305,7 @@ export default function KarigarChat({ route, navigation }) {
     setMessages(prev => [...prev, systemMsg]);
     setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
 
-    if (!bookingId.startsWith("mock-booking-id")) {
+    if (!bookingId.startsWith("mock-booking")) {
       try {
         const response = await fetch(`${BASE_URL}/api/chat/agree`, {
           method: "POST",
@@ -358,7 +324,7 @@ export default function KarigarChat({ route, navigation }) {
             setBuyerAgreed(data.booking.buyer_agreed);
             setSellerAgreed(data.booking.seller_agreed);
             setBothAgreed(data.bothAgreed);
-            
+
             if (data.bothAgreed) {
               const lockMsg = {
                 id: Date.now() + 3,
@@ -379,7 +345,7 @@ export default function KarigarChat({ route, navigation }) {
       setTimeout(() => {
         if (role === "buyer") setSellerAgreed(true);
         else setBuyerAgreed(true);
-        
+
         setBothAgreed(true);
 
         const lockMsg = {
@@ -404,7 +370,7 @@ export default function KarigarChat({ route, navigation }) {
     try {
       setLoading(true);
 
-      if (!bookingId.startsWith("mock-booking-id")) {
+      if (!bookingId.startsWith("mock-booking")) {
         const { error } = await supabase
           .from("bookings")
           .update({
@@ -438,18 +404,18 @@ export default function KarigarChat({ route, navigation }) {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" translucent={false} backgroundColor="#042F23" />
-      
+
       {/* ── 1. Secure Header ── */}
       <View style={styles.header}>
         <View style={styles.headerRow}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
             <ArrowLeft size={24} color="white" />
           </TouchableOpacity>
-          
+
           <View style={styles.avatarContainer}>
-            <Image 
-              source={{ uri: role === "buyer" ? (provider?.profile_image_url || "https://images.unsplash.com/photo-1540569014015-19a7be504e3a?q=80&w=200") : "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200" }} 
-              style={styles.avatar} 
+            <Image
+              source={{ uri: role === "buyer" ? (provider?.profile_image_url || "https://images.unsplash.com/photo-1540569014015-19a7be504e3a?q=80&w=200") : "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200" }}
+              style={styles.avatar}
             />
             <View style={styles.onlineDot} />
           </View>
@@ -478,7 +444,7 @@ export default function KarigarChat({ route, navigation }) {
         <View style={styles.subalertContent}>
           <AlertCircle size={15} color="#047857" style={{ marginRight: 6 }} />
           <Text style={styles.subalertText}>
-            {bothAgreed 
+            {bothAgreed
               ? `Deal agreed at Rs. ${negotiationPrice.toLocaleString()}! Buyer can now confirm booking.`
               : `Discuss details below. Lock in labor at Rs. ${negotiationPrice.toLocaleString()} once agreed.`}
           </Text>
@@ -686,7 +652,7 @@ export default function KarigarChat({ route, navigation }) {
               </View>
             </View>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.successBtn}
               activeOpacity={0.8}
               onPress={handleCloseSuccess}
