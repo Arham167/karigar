@@ -114,7 +114,7 @@ export default function KarigarSellerProfile({ provider, onClose, onBook, onChat
         return;
       }
 
-      if (!seller.id || seller.id.startsWith("mock-")) {
+      if (!seller.id || String(seller.id).startsWith("mock-")) {
         // Generates 4 premium slot options for today for mock providers
         const mockSlots = ["10:30 AM", "01:00 PM", "03:30 PM", "06:00 PM"];
         setDbSlots(mockSlots);
@@ -993,10 +993,6 @@ const styles = StyleSheet.create({
   },
   // Sticky Footer
   footerSticky: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
     backgroundColor: "white",
     paddingHorizontal: 20,
     paddingTop: 14,

@@ -502,7 +502,7 @@ export default function KarigarChat({ route, navigation }) {
       setSending(false);
     }
 
-    if (bookingId.startsWith("mock-") && role === "buyer") {
+    if (bookingId && String(bookingId).startsWith("mock-") && role === "buyer") {
       // Simulate quick auto-responses for mock providers
       setTimeout(async () => {
         const replyText = "I'm ready! Let's click 'Agree to Book' so we can confirm the schedule.";
@@ -554,7 +554,7 @@ export default function KarigarChat({ route, navigation }) {
     updateMessages([...messagesRef.current, systemMsg]);
     setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
 
-    if (!bookingId.startsWith("mock-booking")) {
+    if (bookingId && !String(bookingId).startsWith("mock-booking")) {
       try {
         const response = await fetch(`${BASE_URL}/api/chat/agree`, {
           method: "POST",
@@ -619,7 +619,7 @@ export default function KarigarChat({ route, navigation }) {
     try {
       setLoading(true);
 
-      if (!bookingId.startsWith("mock-booking")) {
+      if (bookingId && !String(bookingId).startsWith("mock-booking")) {
         const { error } = await supabase
           .from("bookings")
           .update({

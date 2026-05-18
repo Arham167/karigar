@@ -187,7 +187,14 @@ exports.matchProviders = async (req, res) => {
               });
 
               // --- DYNAMICALLY COMPUTE AVAILABLE SLOTS ON TARGET DAY ---
-              const targetDateStr = reqTime.toISOString().split('T')[0];
+              // Convert request time to Karachi date string (YYYY-MM-DD)
+              const targetDateStr = new Intl.DateTimeFormat('en-CA', {
+                timeZone: 'Asia/Karachi',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+              }).format(reqTime);
+
               const standardSlots = [
                 { start: '09:00', end: '11:00', label: '09:00 AM - 11:00 AM' },
                 { start: '11:00', end: '13:00', label: '11:00 AM - 01:00 PM' },
@@ -198,14 +205,21 @@ exports.matchProviders = async (req, res) => {
               ];
 
               const availableSlots = standardSlots.filter(slot => {
-                const slotStart = new Date(`${targetDateStr}T${slot.start}:00`);
-                const slotEnd = new Date(`${targetDateStr}T${slot.end}:00`);
+                const slotStart = new Date(`${targetDateStr}T${slot.start}:00+05:00`);
+                const slotEnd = new Date(`${targetDateStr}T${slot.end}:00+05:00`);
                 
                 const slotOverlap = sheetBookings.some(booking => {
                   const isBusy = booking.status === 'booked' || booking.status === 'blocked';
                   if (!isBusy) return false;
                   
-                  const bookingDay = booking.startTime.toISOString().split('T')[0];
+                  // Convert booking start time to Karachi date string
+                  const bookingDay = new Intl.DateTimeFormat('en-CA', {
+                    timeZone: 'Asia/Karachi',
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit'
+                  }).format(booking.startTime);
+
                   if (bookingDay !== targetDateStr) return false;
                   
                   return booking.startTime < slotEnd && booking.endTime > slotStart;

@@ -46,7 +46,7 @@ function parseSheetDateTime(dateStr, timeStr) {
   }
 
   try {
-    const formattedDate = new Date(`${dateStr.trim()}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`);
+    const formattedDate = new Date(`${dateStr.trim()}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00+05:00`);
     return isNaN(formattedDate.getTime()) ? null : formattedDate;
   } catch (e) {
     console.error(`[Sheets Utility] Failed parsing date-time combining ${dateStr} & ${timeStr}:`, e);
@@ -119,14 +119,28 @@ async function fetchSellerCalendar(spreadsheetId, range = 'Sheet1!A2:I100', sell
 async function appendBookingToSheet(spreadsheetId, booking) {
   try {
     const dateObj = new Date(booking.confirmedTime || booking.requestedTime || new Date());
-    const dateStr = dateObj.toISOString().split('T')[0]; // YYYY-MM-DD
     
-    // Format times into HH:MM standard
-    const startStr = dateObj.toTimeString().split(' ')[0].substring(0, 5);
+    // Format date in Karachi timezone (YYYY-MM-DD)
+    const dateStr = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Karachi',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(dateObj);
+    
+    const timeOptions = {
+      timeZone: 'Asia/Karachi',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    };
+    
+    // Format times into HH:MM standard in Karachi timezone
+    const startStr = new Intl.DateTimeFormat('en-GB', timeOptions).format(dateObj);
     
     // Default 2-hour duration for the booking
     const endObj = new Date(dateObj.getTime() + 2 * 60 * 60 * 1000);
-    const endStr = endObj.toTimeString().split(' ')[0].substring(0, 5);
+    const endStr = new Intl.DateTimeFormat('en-GB', timeOptions).format(endObj);
 
     const values = [
       [
