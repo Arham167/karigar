@@ -164,6 +164,53 @@ export default function KarigarChat({ route, navigation }) {
     return () => clearInterval(interval);
   }, []);
 
+  // Inject system messages dynamically from the database state!
+  const injectAgreementSystemMessages = (buyerAgreedVal, sellerAgreedVal, priceVal) => {
+    const currentMsgs = [...messagesRef.current];
+    let changed = false;
+
+    const buyerText = `Customer agreed to lock booking at Rs. ${parseFloat(priceVal).toLocaleString()}`;
+    const sellerText = `Karigar agreed to lock booking at Rs. ${parseFloat(priceVal).toLocaleString()}`;
+    const lockText = `🔒 Price Agreement Locked! Both parties agreed to Rs. ${parseFloat(priceVal).toLocaleString()}. Book Now is now enabled.`;
+
+    const hasBuyerMsg = currentMsgs.some(m => m.system && m.text === buyerText);
+    const hasSellerMsg = currentMsgs.some(m => m.system && m.text === sellerText);
+    const hasLockMsg = currentMsgs.some(m => m.system && m.text === lockText);
+
+    if (buyerAgreedVal && !hasBuyerMsg) {
+      currentMsgs.push({
+        id: `sys-buyer-agreed-${bookingId}`,
+        system: true,
+        text: buyerText
+      });
+      changed = true;
+    }
+
+    if (sellerAgreedVal && !hasSellerMsg) {
+      currentMsgs.push({
+        id: `sys-seller-agreed-${bookingId}`,
+        system: true,
+        text: sellerText
+      });
+      changed = true;
+    }
+
+    if (buyerAgreedVal && sellerAgreedVal && !hasLockMsg) {
+      currentMsgs.push({
+        id: `sys-lock-agreed-${bookingId}`,
+        system: true,
+        isLock: true,
+        text: lockText
+      });
+      changed = true;
+    }
+
+    if (changed) {
+      updateMessages(currentMsgs);
+      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 200);
+    }
+  };
+
   // Fetch Agreement Status from Backend
   const fetchAgreementStatus = async () => {
     if (!bookingId || String(bookingId).startsWith("mock-booking")) {
@@ -183,6 +230,13 @@ export default function KarigarChat({ route, navigation }) {
             setBookingStatus(data.booking.status);
             setNegotiationPrice(parseFloat(data.booking.price || dynamicQuote));
             loadOtherParticipantProfile(data.booking);
+
+            // Inject system messages dynamically from database state
+            injectAgreementSystemMessages(
+              data.buyerAgreed,
+              data.sellerAgreed,
+              parseFloat(data.booking.price || dynamicQuote)
+            );
           }
         }
       }
@@ -623,7 +677,7 @@ export default function KarigarChat({ route, navigation }) {
         const { error } = await supabase
           .from("bookings")
           .update({
-            status: "confirmed",
+            status: "accepted",
             confirmed_time: new Date().toISOString(),
             price: negotiationPrice
           })
@@ -632,7 +686,7 @@ export default function KarigarChat({ route, navigation }) {
         if (error) throw error;
       }
 
-      setBookingStatus("confirmed");
+      setBookingStatus("accepted");
       setShowSuccessModal(true);
 
     } catch (err) {
@@ -812,7 +866,7 @@ export default function KarigarChat({ route, navigation }) {
             onPress={handleFinalBookNow}
             disabled={!bothAgreed}
           >
-            {bookingStatus === "confirmed" ? (
+            {(bookingStatus === "confirmed" || bookingStatus === "accepted") ? (
               <Text style={styles.bookNowBtnText}>Booking Confirmed! 🎉</Text>
             ) : (
               <>

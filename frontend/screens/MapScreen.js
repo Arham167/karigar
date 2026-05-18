@@ -658,16 +658,16 @@ export default function MapScreen({ navigation }) {
               setIsSubmitting(true);
               const { data: { user } } = await supabase.auth.getUser();
               
-              // Add a confirmed booking in Supabase
+              // Add an accepted booking in Supabase
               const { error } = await supabase.from("bookings").insert([
                 {
                   buyer_id: user.id,
-                  seller_id: provider.id && provider.id.startsWith("mock-") ? null : provider.id, // Only use real provider ID if not mock
+                  seller_id: provider.id && String(provider.id).startsWith("mock-") ? null : provider.id, // Only use real provider ID if not mock
                   service_type: matchedService,
                   location: matchedLocation,
                   requested_time: new Date().toISOString(),
                   price: finalPrice,
-                  status: "confirmed",
+                  status: "accepted",
                 },
               ]);
 

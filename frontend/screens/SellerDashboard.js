@@ -205,7 +205,7 @@ export default function SellerDashboard({ navigation }) {
         // Compute live stats
         const completed = bookings.filter(b => b.status === "completed").length;
         const totalEarnings = bookings
-          .filter(b => b.status === "completed" || b.status === "confirmed")
+          .filter(b => b.status === "completed" || b.status === "confirmed" || b.status === "accepted")
           .reduce((sum, b) => sum + parseFloat(b.price || 0), 0);
 
         setStats({
@@ -448,7 +448,7 @@ export default function SellerDashboard({ navigation }) {
             let statusColor = "#D97706";
             let statusBg = "#FFFBEB";
 
-            if (item.status === "confirmed") {
+            if (item.status === "confirmed" || item.status === "accepted") {
               statusLabel = "Confirmed Booked";
               statusColor = "#059669";
               statusBg = "#ECFDF5";
