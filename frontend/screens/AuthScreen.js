@@ -12,6 +12,7 @@ import {
   Platform,
   TouchableWithoutFeedback,
   Keyboard,
+  Image,
 } from "react-native";
 import Svg, { Path, Rect, Circle, G } from "react-native-svg";
 import {
@@ -158,10 +159,13 @@ export default function AuthScreen({ navigation }) {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.brand}>
-            <View style={styles.logoBox}>
-              <IconLogo />
+            <View style={styles.logoContainer}>
+              <Image
+                source={require("../assets/logo.png")}
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
             </View>
-            <Text style={styles.brandName}>Karigar</Text>
             <Text style={styles.brandTagline}>Dignity in Work, Reliability in Service</Text>
           </View>
 
@@ -240,18 +244,27 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: SURFACE },
   safe: { flex: 1, backgroundColor: SURFACE },
   scroll: { flexGrow: 1, alignItems: "center", paddingHorizontal: 20, paddingTop: 16, paddingBottom: 32, gap: 24 },
-  brand: { alignItems: "center", gap: 10, marginBottom: 4 },
-  logoBox: {
-    width: 72,
-    height: 72,
-    backgroundColor: GREEN_PRIMARY,
-    borderRadius: 20,
+  brand: { alignItems: "center", gap: 12, marginBottom: 8 },
+  logoContainer: {
+    width: 140,
+    height: 140,
+    backgroundColor: "#ffffff",
+    borderRadius: 28,
     alignItems: "center",
     justifyContent: "center",
-    elevation: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: "rgba(220,232,225,0.8)",
+    overflow: "hidden",
   },
-  logoEmoji: { fontSize: 32 },
-  brandName: { fontFamily: "DMSerifDisplay_400Regular", fontSize: 32, color: GREEN_PRIMARY, letterSpacing: -0.5, marginTop: 4 },
+  logoImage: {
+    width: 130,
+    height: 130,
+  },
   brandTagline: { fontFamily: "DMSans_400Regular", fontSize: 14, color: TEXT_MID, textAlign: "center", lineHeight: 20 },
   card: {
     width: "100%",
