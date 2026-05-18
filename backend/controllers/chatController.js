@@ -1,4 +1,5 @@
 const supabase = require("../utils/supabase");
+const googleSheets = require("../utils/googleSheets");
 
 // Robust in-memory store for mock bookings and Supabase fallbacks
 global.chatMemoryStore = global.chatMemoryStore || {};
@@ -266,6 +267,41 @@ exports.agreeToBook = async (req, res) => {
 
     const finalBooking = updatedBooking[0];
     const bothAgreed = finalBooking.buyer_agreed && finalBooking.seller_agreed;
+
+    // IF AGREEMENT IS SUCCESSFUL, SYNC BOOKING TO GOOGLE SHEETS
+    if (bothAgreed) {
+      // Run async in background so we don't block the API response
+      (async () => {
+        try {
+          // Fetch provider profile and sheet configurations
+          const { data: provider } = await supabase
+            .from("providers")
+            .select("google_sheet_id, use_sheets_crm, business_name")
+            .eq("user_id", finalBooking.provider_id || finalBooking.seller_id)
+            .single();
+
+          if (provider && provider.use_sheets_crm && provider.google_sheet_id) {
+            console.log(`[Chat Controller] Syncing confirmed booking to Google Sheet for ${provider.business_name}`);
+            
+            // Get buyer's name for client information
+            const { data: buyerProfile } = await supabase
+              .from("profiles")
+              .select("name")
+              .eq("id", finalBooking.buyer_id)
+              .single();
+
+            await googleSheets.appendBookingToSheet(provider.google_sheet_id, {
+              confirmedTime: finalBooking.confirmed_time || new Date(),
+              requestedTime: finalBooking.requested_time || new Date(),
+              buyerName: buyerProfile ? buyerProfile.name : "Client via Karigar",
+              serviceType: finalBooking.service_type || "Service Request"
+            });
+          }
+        } catch (syncErr) {
+          console.error("[Chat Controller] Background Google Sheet sync failed:", syncErr.message);
+        }
+      })();
+    }
 
     return res.status(200).json({
       success: true,

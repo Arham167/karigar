@@ -163,32 +163,57 @@ exports.matchProviders = async (req, res) => {
 
       // 3. Check availability if a time is specified
       if (resolvedTimestamp && matchingProviders.length > 0) {
-        const providerIds = matchingProviders.map(p => p.id);
         const reqTime = new Date(resolvedTimestamp);
         
         // Define a 2-hour window around the requested time
-        const startTime = new Date(reqTime.getTime() - 2 * 60 * 60 * 1000).toISOString();
-        const endTime = new Date(reqTime.getTime() + 2 * 60 * 60 * 1000).toISOString();
+        const startTimeWindow = new Date(reqTime.getTime() - 2 * 60 * 60 * 1000);
+        const endTimeWindow = new Date(reqTime.getTime() + 2 * 60 * 60 * 1000);
 
-        // Fetch booked slots that overlap with this window
-        const { data: bookedSlots, error: slotError } = await supabase
-          .from("booking_slots")
-          .select("provider_id, start_time, end_time")
-          .eq("status", "booked")
-          .in("provider_id", providerIds)
-          .or(`start_time.gte.${startTime},end_time.lte.${endTime}`);
+        const googleSheets = require("../utils/googleSheets");
 
-        if (slotError) {
-          console.error("[Matching Engine] Error fetching booking slots:", slotError);
-        }
+        const availabilityPromises = matchingProviders.map(async (provider) => {
+          // --- PATH A: GOOGLE SHEETS CRM ---
+          if (provider.use_sheets_crm && provider.google_sheet_id) {
+            try {
+              console.log(`[Matching Engine] Reading live calendar from Google Sheet for provider: ${provider.business_name}`);
+              const sheetBookings = await googleSheets.fetchSellerCalendar(provider.google_sheet_id);
+              
+              // Overlap check: Slot starts before window ends, and ends after window starts
+              const hasOverlap = sheetBookings.some(slot => {
+                const isBusy = slot.status === 'booked' || slot.status === 'blocked';
+                if (!isBusy) return false;
+                return slot.startTime < endTimeWindow && slot.endTime > startTimeWindow;
+              });
 
-        const bookedProviderIds = new Set((bookedSlots || []).map(slot => slot.provider_id));
+              return {
+                ...provider,
+                available: !hasOverlap
+              };
+            } catch (err) {
+              console.error(`[Matching Engine] Google Sheet fetch failed for ${provider.business_name}, falling back to local DB:`, err.message);
+            }
+          }
 
-        // Mark providers as available or unavailable
-        matchingProviders = matchingProviders.map(provider => ({
-          ...provider,
-          available: !bookedProviderIds.has(provider.id)
-        }));
+          // --- PATH B: SUPABASE DB FALLBACK ---
+          try {
+            const { data: bookedSlots } = await supabase
+              .from("booking_slots")
+              .select("id")
+              .eq("provider_id", provider.id)
+              .eq("status", "booked")
+              .or(`start_time.gte.${startTimeWindow.toISOString()},end_time.lte.${endTimeWindow.toISOString()}`);
+            
+            return {
+              ...provider,
+              available: !bookedSlots || bookedSlots.length === 0
+            };
+          } catch (slotError) {
+            console.error(`[Matching Engine] Local slot fetching failed for provider ${provider.id}:`, slotError);
+            return { ...provider, available: true }; // Optimistic fallback
+          }
+        });
+
+        matchingProviders = await Promise.all(availabilityPromises);
       } else {
         // Assume available if no time is checked
         matchingProviders = matchingProviders.map(provider => ({
