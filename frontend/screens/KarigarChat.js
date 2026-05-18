@@ -47,6 +47,18 @@ export default function KarigarChat({ route, navigation }) {
   };
 
   // State Variables
+// Global Chat History Cache for 100% invincible cross-screen persistence in Expo Go
+global.appChatHistory = global.appChatHistory || {};
+
+function getNormalizedChatKey(bId) {
+  if (!bId) return "mock-booking-1";
+  if (bId.includes("mock-booking-1") || bId.includes("mock-1")) return "mock-booking-1";
+  if (bId.includes("mock-booking-2") || bId.includes("mock-2")) return "mock-booking-2";
+  if (bId.includes("mock-booking-3") || bId.includes("mock-3")) return "mock-booking-3";
+  if (bId.startsWith("mock-")) return "mock-booking-1";
+  return bId;
+}
+
   // State Variables
   const [messages, setMessages] = useState([]);
   const messagesRef = useRef([]);
@@ -58,9 +70,24 @@ export default function KarigarChat({ route, navigation }) {
   const [currentUserId, setCurrentUserId] = useState(null);
   const currentUserIdRef = useRef(null);
 
+  const chatKey = getNormalizedChatKey(bookingId);
+
   const updateMessages = (newMsgs) => {
+    // Preserve globally across all screens and unmounts!
+    global.appChatHistory[chatKey] = newMsgs;
     messagesRef.current = newMsgs;
-    setMessages(newMsgs);
+
+    // Dynamically compute 'from' for the current active view!
+    const renderableMsgs = newMsgs.map(m => {
+      if (m.system) return m;
+      const computedFrom = m.senderRole === role ? "me" : "other";
+      return {
+        ...m,
+        from: computedFrom
+      };
+    });
+
+    setMessages(renderableMsgs);
   };
 
   const updateCurrentUserId = (id) => {
@@ -155,6 +182,12 @@ export default function KarigarChat({ route, navigation }) {
   const fetchMessages = async (customUserId = null) => {
     const activeUserId = customUserId || currentUserIdRef.current || (role === "buyer" ? MOCK_BUYER_UUID : MOCK_SELLER_UUID);
 
+    // Immediately load our global preserved chat history!
+    const existingHistory = global.appChatHistory[chatKey] || [];
+    if (existingHistory.length > 0) {
+      updateMessages(existingHistory);
+    }
+
     try {
       setLoading(true);
       const response = await fetch(`${BASE_URL}/api/chat/messages/${bookingId}`, {
@@ -162,28 +195,35 @@ export default function KarigarChat({ route, navigation }) {
       });
       if (response.ok) {
         const data = await response.json();
-        if (data.success) {
-          if (data.messages && data.messages.length > 0) {
-            const formatted = data.messages.map(msg => ({
+        if (data.success && data.messages && data.messages.length > 0) {
+          const formatted = data.messages.map(msg => {
+            const isBuyer = msg.sender_id.includes("buyer") || msg.sender_id === MOCK_BUYER_UUID || (role === "buyer" && msg.sender_id === activeUserId);
+            return {
               id: msg.id,
+              senderRole: isBuyer ? "buyer" : "seller",
               text: msg.message,
-              from: msg.sender_id === activeUserId || (role === "buyer" && (msg.sender_id === MOCK_BUYER_UUID || msg.sender_id.includes("buyer"))) || (role === "seller" && (msg.sender_id === MOCK_SELLER_UUID || msg.sender_id.includes("seller"))) ? "me" : "other",
               time: formatTime(msg.timestamp),
               system: false
-            }));
-            updateMessages(formatted);
-          } else {
-            loadMockMessages();
+            };
+          });
+
+          // Merge backend messages with our global preserved history (deduplicated by text/id)
+          const merged = [...(global.appChatHistory[chatKey] || [])];
+          const existingTexts = new Set(merged.map(m => m.text.trim().toLowerCase()));
+
+          for (const fm of formatted) {
+            if (!existingTexts.has(fm.text.trim().toLowerCase())) {
+              merged.push(fm);
+              existingTexts.add(fm.text.trim().toLowerCase());
+            }
           }
-        } else {
-          loadMockMessages();
+
+          merged.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+          updateMessages(merged);
         }
-      } else {
-        loadMockMessages();
       }
     } catch (err) {
-      console.log("Error fetching messages, loading mock:", err);
-      loadMockMessages();
+      console.log("Error fetching messages, using global cache:", err);
     } finally {
       setLoading(false);
       setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 200);
@@ -202,22 +242,32 @@ export default function KarigarChat({ route, navigation }) {
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.messages && data.messages.length > 0) {
-          const formatted = data.messages.map(msg => ({
-            id: msg.id,
-            text: msg.message,
-            from: msg.sender_id === activeUserId || (role === "buyer" && (msg.sender_id === MOCK_BUYER_UUID || msg.sender_id.includes("buyer"))) || (role === "seller" && (msg.sender_id === MOCK_SELLER_UUID || msg.sender_id.includes("seller"))) ? "me" : "other",
-            time: formatTime(msg.timestamp),
-            system: false
-          }));
+          const formatted = data.messages.map(msg => {
+            const isBuyer = msg.sender_id.includes("buyer") || msg.sender_id === MOCK_BUYER_UUID || (role === "buyer" && msg.sender_id === activeUserId);
+            return {
+              id: msg.id,
+              senderRole: isBuyer ? "buyer" : "seller",
+              text: msg.message,
+              time: formatTime(msg.timestamp),
+              system: false
+            };
+          });
 
-          // Only update if count changed to prevent jumpiness
-          const currentNonSystemCount = messagesRef.current.filter(m => !m.system).length;
+          const merged = [...(global.appChatHistory[chatKey] || [])];
+          const existingTexts = new Set(merged.map(m => m.text.trim().toLowerCase()));
+          let added = false;
 
-          if (formatted.length !== currentNonSystemCount) {
-            // Re-inject system messages dynamically based on agreement state
-            const existingSystemMsgs = messagesRef.current.filter(m => m.system);
-            const finalMsgs = [...formatted, ...existingSystemMsgs];
-            updateMessages(finalMsgs);
+          for (const fm of formatted) {
+            if (!existingTexts.has(fm.text.trim().toLowerCase())) {
+              merged.push(fm);
+              existingTexts.add(fm.text.trim().toLowerCase());
+              added = true;
+            }
+          }
+
+          if (added) {
+            merged.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+            updateMessages(merged);
             setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
           }
         }
@@ -229,7 +279,11 @@ export default function KarigarChat({ route, navigation }) {
 
   // Populate Mock Messages for a gorgeous visual layout instantly
   const loadMockMessages = () => {
-    updateMessages([]);
+    // If we have global history, keep it!
+    const existingHistory = global.appChatHistory[chatKey] || [];
+    if (existingHistory.length === 0) {
+      updateMessages([]);
+    }
   };
 
   const formatTime = (isoString) => {
@@ -262,19 +316,20 @@ export default function KarigarChat({ route, navigation }) {
     setInputText("");
 
     const newMsgLocal = {
-      id: Date.now(),
-      from: "me",
+      id: "msg-" + Date.now() + "-" + Math.random().toString(36).substr(2, 4),
+      senderRole: role, // 'buyer' or 'seller'
       text: userMsgText,
       time: getNowFormattedTime(),
       system: false
     };
 
-    updateMessages([...messagesRef.current, newMsgLocal]);
+    const updatedHistory = [...(global.appChatHistory[chatKey] || []), newMsgLocal];
+    updateMessages(updatedHistory);
     setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
 
     const activeUserId = currentUserIdRef.current || (role === "buyer" ? MOCK_BUYER_UUID : MOCK_SELLER_UUID);
 
-    // Call Backend secure message endpoint for ALL bookings (mock and real) to ensure memory store sync
+    // Call Backend secure message endpoint
     try {
       setSending(true);
       await fetch(`${BASE_URL}/api/chat/message`, {
@@ -283,7 +338,8 @@ export default function KarigarChat({ route, navigation }) {
         body: JSON.stringify({
           bookingId: bookingId,
           senderId: activeUserId,
-          message: userMsgText
+          message: userMsgText,
+          role: role
         })
       });
     } catch (err) {
@@ -292,22 +348,22 @@ export default function KarigarChat({ route, navigation }) {
       setSending(false);
     }
 
-    if (bookingId.startsWith("mock-booking") && role === "buyer") {
+    if (bookingId.startsWith("mock-") && role === "buyer") {
       // Simulate quick auto-responses for mock providers
       setTimeout(async () => {
         const replyText = "I'm ready! Let's click 'Agree to Book' so we can confirm the schedule.";
-        const replySender = "seller-mock-id";
+        const replySender = MOCK_SELLER_UUID;
         const replyLocal = {
-          id: Date.now() + 1,
-          from: "other",
+          id: "msg-" + Date.now() + "-reply",
+          senderRole: "seller",
           text: replyText,
           time: getNowFormattedTime(),
           system: false
         };
-        updateMessages([...messagesRef.current, replyLocal]);
+        const currentHist = [...(global.appChatHistory[chatKey] || []), replyLocal];
+        updateMessages(currentHist);
         setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 200);
 
-        // Send mock reply to backend memory store so seller sees it when logging in!
         try {
           await fetch(`${BASE_URL}/api/chat/message`, {
             method: "POST",
@@ -315,7 +371,8 @@ export default function KarigarChat({ route, navigation }) {
             body: JSON.stringify({
               bookingId: bookingId,
               senderId: replySender,
-              message: replyText
+              message: replyText,
+              role: "seller"
             })
           });
         } catch (e) {
