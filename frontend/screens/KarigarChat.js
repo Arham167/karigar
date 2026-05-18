@@ -37,6 +37,19 @@ const { width: SCREEN_W } = Dimensions.get("window");
 // Hardcode API URL (Vercel backend tunnel)
 const BASE_URL = 'https://karigar-arham-nomans-projects.vercel.app';
 
+// Global Chat History Cache for 100% invincible cross-screen persistence in Expo Go
+global.appChatHistory = global.appChatHistory || {};
+
+function getNormalizedChatKey(bId) {
+  if (!bId) return "mock-booking-1";
+  const strId = String(bId);
+  if (strId.includes("mock-booking-1") || strId.includes("mock-1")) return "mock-booking-1";
+  if (strId.includes("mock-booking-2") || strId.includes("mock-2")) return "mock-booking-2";
+  if (strId.includes("mock-booking-3") || strId.includes("mock-3")) return "mock-booking-3";
+  if (strId.startsWith("mock-")) return "mock-booking-1";
+  return strId;
+}
+
 export default function KarigarChat({ route, navigation }) {
   const { bookingId, provider, role, dynamicQuote, buyerName } = route.params || {
     bookingId: "mock-booking-id",
@@ -45,19 +58,6 @@ export default function KarigarChat({ route, navigation }) {
     dynamicQuote: 800,
     buyerName: "Arham N."
   };
-
-  // State Variables
-// Global Chat History Cache for 100% invincible cross-screen persistence in Expo Go
-global.appChatHistory = global.appChatHistory || {};
-
-function getNormalizedChatKey(bId) {
-  if (!bId) return "mock-booking-1";
-  if (bId.includes("mock-booking-1") || bId.includes("mock-1")) return "mock-booking-1";
-  if (bId.includes("mock-booking-2") || bId.includes("mock-2")) return "mock-booking-2";
-  if (bId.includes("mock-booking-3") || bId.includes("mock-3")) return "mock-booking-3";
-  if (bId.startsWith("mock-")) return "mock-booking-1";
-  return bId;
-}
 
   // State Variables
   const [messages, setMessages] = useState([]);
@@ -73,12 +73,14 @@ function getNormalizedChatKey(bId) {
   const chatKey = getNormalizedChatKey(bookingId);
 
   const updateMessages = (newMsgs) => {
+    const validMsgs = Array.isArray(newMsgs) ? newMsgs : [];
     // Preserve globally across all screens and unmounts!
-    global.appChatHistory[chatKey] = newMsgs;
-    messagesRef.current = newMsgs;
+    global.appChatHistory[chatKey] = validMsgs;
+    messagesRef.current = validMsgs;
 
     // Dynamically compute 'from' for the current active view!
-    const renderableMsgs = newMsgs.map(m => {
+    const renderableMsgs = validMsgs.map(m => {
+      if (!m) return { id: Math.random(), text: "", from: "other" };
       if (m.system) return m;
       const computedFrom = m.senderRole === role ? "me" : "other";
       return {
@@ -154,7 +156,7 @@ function getNormalizedChatKey(bId) {
 
   // Fetch Agreement Status from Backend
   const fetchAgreementStatus = async () => {
-    if (bookingId.startsWith("mock-booking")) {
+    if (!bookingId || String(bookingId).startsWith("mock-booking")) {
       return;
     }
     try {
@@ -197,11 +199,12 @@ function getNormalizedChatKey(bId) {
         const data = await response.json();
         if (data.success && data.messages && data.messages.length > 0) {
           const formatted = data.messages.map(msg => {
-            const isBuyer = msg.sender_id.includes("buyer") || msg.sender_id === MOCK_BUYER_UUID || (role === "buyer" && msg.sender_id === activeUserId);
+            const safeSenderId = msg.sender_id ? String(msg.sender_id) : "";
+            const isBuyer = safeSenderId.includes("buyer") || safeSenderId === MOCK_BUYER_UUID || (role === "buyer" && safeSenderId === activeUserId);
             return {
-              id: msg.id,
+              id: msg.id || Math.random(),
               senderRole: isBuyer ? "buyer" : "seller",
-              text: msg.message,
+              text: msg.message ? String(msg.message) : "",
               time: formatTime(msg.timestamp),
               system: false
             };
@@ -209,16 +212,17 @@ function getNormalizedChatKey(bId) {
 
           // Merge backend messages with our global preserved history (deduplicated by text/id)
           const merged = [...(global.appChatHistory[chatKey] || [])];
-          const existingTexts = new Set(merged.map(m => m.text.trim().toLowerCase()));
+          const existingTexts = new Set(merged.map(m => (m && m.text ? String(m.text).trim().toLowerCase() : "")));
 
           for (const fm of formatted) {
-            if (!existingTexts.has(fm.text.trim().toLowerCase())) {
+            const cleanText = fm.text ? String(fm.text).trim().toLowerCase() : "";
+            if (cleanText && !existingTexts.has(cleanText)) {
               merged.push(fm);
-              existingTexts.add(fm.text.trim().toLowerCase());
+              existingTexts.add(cleanText);
             }
           }
 
-          merged.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+          merged.sort((a, b) => String(a?.id || "").localeCompare(String(b?.id || "")));
           updateMessages(merged);
         }
       }
@@ -243,30 +247,32 @@ function getNormalizedChatKey(bId) {
         const data = await response.json();
         if (data.success && data.messages && data.messages.length > 0) {
           const formatted = data.messages.map(msg => {
-            const isBuyer = msg.sender_id.includes("buyer") || msg.sender_id === MOCK_BUYER_UUID || (role === "buyer" && msg.sender_id === activeUserId);
+            const safeSenderId = msg.sender_id ? String(msg.sender_id) : "";
+            const isBuyer = safeSenderId.includes("buyer") || safeSenderId === MOCK_BUYER_UUID || (role === "buyer" && safeSenderId === activeUserId);
             return {
-              id: msg.id,
+              id: msg.id || Math.random(),
               senderRole: isBuyer ? "buyer" : "seller",
-              text: msg.message,
+              text: msg.message ? String(msg.message) : "",
               time: formatTime(msg.timestamp),
               system: false
             };
           });
 
           const merged = [...(global.appChatHistory[chatKey] || [])];
-          const existingTexts = new Set(merged.map(m => m.text.trim().toLowerCase()));
+          const existingTexts = new Set(merged.map(m => (m && m.text ? String(m.text).trim().toLowerCase() : "")));
           let added = false;
 
           for (const fm of formatted) {
-            if (!existingTexts.has(fm.text.trim().toLowerCase())) {
+            const cleanText = fm.text ? String(fm.text).trim().toLowerCase() : "";
+            if (cleanText && !existingTexts.has(cleanText)) {
               merged.push(fm);
-              existingTexts.add(fm.text.trim().toLowerCase());
+              existingTexts.add(cleanText);
               added = true;
             }
           }
 
           if (added) {
-            merged.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+            merged.sort((a, b) => String(a?.id || "").localeCompare(String(b?.id || "")));
             updateMessages(merged);
             setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
           }
