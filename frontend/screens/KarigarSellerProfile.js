@@ -183,7 +183,7 @@ export default function KarigarSellerProfile({ provider, onClose, onBook, onChat
     <View style={styles.container}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* ── Hero Image & Gradient Overlay ── */}
         <View style={styles.heroContainer}>
           <Image
