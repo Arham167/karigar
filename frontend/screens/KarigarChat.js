@@ -673,6 +673,7 @@ export default function KarigarChat({ route, navigation }) {
     try {
       setLoading(true);
 
+      if (bookingId && !String(bookingId).startsWith("mock-booking")) {
         const { error } = await supabase
           .from("bookings")
           .update({
