@@ -128,6 +128,7 @@ export default function KarigarChat({ route, navigation }) {
   const [bookingStatus, setBookingStatus] = useState("pending");
   const [bothAgreed, setBothAgreed] = useState(false);
   const [negotiationPrice, setNegotiationPrice] = useState(dynamicQuote);
+  const [bookingTime, setBookingTime] = useState(provider?.selectedSlot || route.params?.booking?.requested_time || null);
 
   // Success booking state
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -293,6 +294,9 @@ export default function KarigarChat({ route, navigation }) {
             setBookingStatus(data.booking.status);
             setNegotiationPrice(parseFloat(data.booking.price || dynamicQuote));
             loadOtherParticipantProfile(data.booking);
+            if (!provider?.selectedSlot && data.booking.requested_time) {
+              setBookingTime(data.booking.requested_time);
+            }
 
             // Inject system messages dynamically from database state
             injectAgreementSystemMessages(
@@ -565,6 +569,22 @@ export default function KarigarChat({ route, navigation }) {
     const ampm = h >= 12 ? "PM" : "AM";
     h = h % 12 || 12;
     return `${h}:${m} ${ampm}`;
+  };
+
+  const formatDisplayTime = (timeVal) => {
+    if (!timeVal) return "Not specified";
+    // Check if it's an ISO date string
+    if (timeVal.includes('T') && (timeVal.includes('Z') || timeVal.includes('+') || timeVal.includes('-'))) {
+      try {
+        const d = new Date(timeVal);
+        if (!isNaN(d.getTime())) {
+          return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+        }
+      } catch (e) {
+        return timeVal;
+      }
+    }
+    return timeVal;
   };
 
   // Send Message Trigger
@@ -896,8 +916,9 @@ export default function KarigarChat({ route, navigation }) {
       <View style={styles.actionPanel}>
         <View style={styles.negotiationRow}>
           <View style={styles.negotiationPriceBox}>
-            <Text style={styles.negLabel}>NEGOTIATED LABOUR</Text>
+            <Text style={styles.negLabel}>RATE & TIME</Text>
             <Text style={styles.negVal}>Rs. {negotiationPrice.toLocaleString()}</Text>
+            <Text style={[styles.negLabel, { marginTop: 2, color: '#065F46', fontSize: 10 }]}>{formatDisplayTime(bookingTime)}</Text>
           </View>
 
           {/* Dynamic Agree Button based on state */}
@@ -1035,6 +1056,10 @@ export default function KarigarChat({ route, navigation }) {
               <View style={styles.receiptRow}>
                 <Text style={styles.receiptLabel}>Locked Service Rate</Text>
                 <Text style={[styles.receiptVal, { color: "#065F46", fontWeight: "bold" }]}>Rs. {negotiationPrice.toLocaleString()}</Text>
+              </View>
+              <View style={styles.receiptRow}>
+                <Text style={styles.receiptLabel}>Scheduled Time</Text>
+                <Text style={[styles.receiptVal, { color: "#065F46", fontWeight: "bold" }]}>{formatDisplayTime(bookingTime)}</Text>
               </View>
               <View style={styles.receiptRow}>
                 <Text style={styles.receiptLabel}>Status</Text>

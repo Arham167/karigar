@@ -67,7 +67,7 @@ const DUMMY_SERVICES = [
   { name: "Full Room House Rewiring", price: "Rs. 4,500" },
 ];
 
-export default function KarigarSellerProfile({ provider, onClose, onBook, onChat }) {
+export default function KarigarSellerProfile({ provider, userRequestedTime, userRequestedTimestamp, onClose, onBook, onChat }) {
   const [liked, setLiked] = useState(false);
   const [activeTab, setActiveTab] = useState("about");
   const insets = useSafeAreaInsets();
@@ -101,26 +101,56 @@ export default function KarigarSellerProfile({ provider, onClose, onBook, onChat
   const platformFee = 200;
   const totalQuote = baseLabor + travelFee + platformFee;
 
+  // Determine if specific time is requested
+  const hasSpecificTime = userRequestedTime && (/\d/.test(userRequestedTime) || /am|pm|morning|evening|night|now/i.test(userRequestedTime));
+  const isTomorrow = userRequestedTime && /tomorrow/i.test(userRequestedTime);
+
   // State for available slots and selected slot
   const [dbSlots, setDbSlots] = useState([]);
   const [selectedSlot, setSelectedSlot] = useState("");
   const [loadingSlots, setLoadingSlots] = useState(false);
 
+  // Helper to filter past slots if it's today
+  const filterPastSlots = (slots) => {
+    if (isTomorrow) return slots; // Show all for tomorrow
+    const now = new Date();
+    return slots.filter(slot => {
+      const match = slot.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+      if (!match) return true;
+      let h = parseInt(match[1], 10);
+      let m = parseInt(match[2], 10);
+      const ampm = match[3].toUpperCase();
+      if (ampm === 'PM' && h < 12) h += 12;
+      if (ampm === 'AM' && h === 12) h = 0;
+      const slotTime = new Date();
+      slotTime.setHours(h, m, 0, 0);
+      return slotTime > now;
+    });
+  };
+
   // Fetch slots from DB or generate high-fidelity fallback slots
   useEffect(() => {
     const fetchSlots = async () => {
+      if (hasSpecificTime) {
+        setDbSlots([]);
+        setSelectedSlot("");
+        return;
+      }
+
       // Prioritize live slots passed from our Google Sheet CRM matching engine!
       if (seller.available_slots && seller.available_slots.length > 0) {
-        setDbSlots(seller.available_slots);
-        setSelectedSlot(seller.available_slots[0]);
+        const filtered = filterPastSlots(seller.available_slots);
+        setDbSlots(filtered);
+        setSelectedSlot(filtered.length > 0 ? filtered[0] : "");
         return;
       }
 
       if (!seller.id || String(seller.id).startsWith("mock-")) {
         // Generates 4 premium slot options for today for mock providers
-        const mockSlots = ["10:30 AM", "01:00 PM", "03:30 PM", "06:00 PM"];
-        setDbSlots(mockSlots);
-        setSelectedSlot(mockSlots[1]); // Default select second slot
+        const mockSlots = ["09:00 AM", "11:30 AM", "02:00 PM", "05:00 PM", "07:30 PM"];
+        const filtered = filterPastSlots(mockSlots);
+        setDbSlots(filtered);
+        setSelectedSlot(filtered.length > 0 ? filtered[0] : "");
         return;
       }
       
@@ -133,33 +163,36 @@ export default function KarigarSellerProfile({ provider, onClose, onBook, onChat
           .eq("status", "available")
           .gte("start_time", new Date().toISOString())
           .order("start_time", { ascending: true })
-          .limit(4);
+          .limit(6);
 
         if (data && data.length > 0) {
           const formatted = data.map(slot => {
             const time = new Date(slot.start_time);
             return time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           });
-          setDbSlots(formatted);
-          setSelectedSlot(formatted[0]);
+          const filtered = filterPastSlots(formatted);
+          setDbSlots(filtered);
+          setSelectedSlot(filtered.length > 0 ? filtered[0] : "");
         } else {
           // Fallback slots if no active available slots are stored in Supabase
-          const fallbackSlots = ["09:30 AM", "12:00 PM", "02:30 PM", "05:00 PM"];
-          setDbSlots(fallbackSlots);
-          setSelectedSlot(fallbackSlots[1]);
+          const fallbackSlots = ["09:00 AM", "11:30 AM", "02:00 PM", "05:00 PM", "07:30 PM"];
+          const filtered = filterPastSlots(fallbackSlots);
+          setDbSlots(filtered);
+          setSelectedSlot(filtered.length > 0 ? filtered[0] : "");
         }
       } catch (err) {
         console.log("Error fetching booking slots:", err);
-        const fallbackSlots = ["09:30 AM", "12:00 PM", "02:30 PM", "05:00 PM"];
-        setDbSlots(fallbackSlots);
-        setSelectedSlot(fallbackSlots[1]);
+        const fallbackSlots = ["09:00 AM", "11:30 AM", "02:00 PM", "05:00 PM", "07:30 PM"];
+        const filtered = filterPastSlots(fallbackSlots);
+        setDbSlots(filtered);
+        setSelectedSlot(filtered.length > 0 ? filtered[0] : "");
       } finally {
         setLoadingSlots(false);
       }
     };
 
     fetchSlots();
-  }, [seller.id]);
+  }, [seller.id, hasSpecificTime, isTomorrow]);
 
   // Determine specialization tags
   const getSpecTags = () => {
@@ -350,34 +383,42 @@ export default function KarigarSellerProfile({ provider, onClose, onBook, onChat
               </View>
 
               {/* Available Slots (Interactive From DB / Falling back cleanly) */}
-              <Text style={styles.dashboardSectionTitle}>Available Slots (DB Verified)</Text>
-              {loadingSlots ? (
-                <View style={styles.slotsLoader}>
-                  <ActivityIndicator size="small" color="#065F46" />
-                </View>
-              ) : (
-                <ScrollView 
-                  horizontal 
-                  showsHorizontalScrollIndicator={false} 
-                  contentContainerStyle={styles.slotsScrollContainer}
-                >
-                  {dbSlots.map((slot, index) => {
-                    const isSelected = selectedSlot === slot;
-                    return (
-                      <TouchableOpacity
-                        key={index}
-                        style={[styles.slotChipButton, isSelected && styles.slotChipButtonActive]}
-                        activeOpacity={0.855}
-                        onPress={() => setSelectedSlot(slot)}
-                      >
-                        <Calendar size={12} color={isSelected ? "white" : "#6B7280"} style={{ marginRight: 5 }} />
-                        <Text style={[styles.slotChipText, isSelected && styles.slotChipTextActive]} numberOfLines={1}>
-                          {slot}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
+              {!hasSpecificTime && (
+                <>
+                  <Text style={styles.dashboardSectionTitle}>Available Slots (DB Verified)</Text>
+                  {loadingSlots ? (
+                    <View style={styles.slotsLoader}>
+                      <ActivityIndicator size="small" color="#065F46" />
+                    </View>
+                  ) : dbSlots.length > 0 ? (
+                    <ScrollView 
+                      horizontal 
+                      showsHorizontalScrollIndicator={false} 
+                      contentContainerStyle={styles.slotsScrollContainer}
+                    >
+                      {dbSlots.map((slot, index) => {
+                        const isSelected = selectedSlot === slot;
+                        return (
+                          <TouchableOpacity
+                            key={index}
+                            style={[styles.slotChipButton, isSelected && styles.slotChipButtonActive]}
+                            activeOpacity={0.855}
+                            onPress={() => setSelectedSlot(slot)}
+                          >
+                            <Calendar size={12} color={isSelected ? "white" : "#6B7280"} style={{ marginRight: 5 }} />
+                            <Text style={[styles.slotChipText, isSelected && styles.slotChipTextActive]} numberOfLines={1}>
+                              {slot}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                  ) : (
+                    <Text style={{ fontFamily: "DMSans_400Regular", fontSize: 13, color: "#6B7280", fontStyle: "italic" }}>
+                      No available slots for the selected time.
+                    </Text>
+                  )}
+                </>
               )}
 
               {/* Dynamic Price Quote breakdown receipt */}
@@ -814,19 +855,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "white",
-    borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    borderRadius: 12,
+    paddingVertical: 10,
+    width: (SCREEN_W - 40) / 2.2,
     borderWidth: 1.5,
     borderColor: "#E5E7EB",
   },
   slotChipButtonActive: {
     backgroundColor: "#065F46",
     borderColor: "#065F46",
+    shadowColor: "#065F46",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 4,
   },
   slotChipText: {
     fontFamily: "DMSans_700Bold",
-    fontSize: 11,
+    fontSize: 13,
     color: "#4B5563",
   },
   slotChipTextActive: {

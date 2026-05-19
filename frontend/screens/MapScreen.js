@@ -666,6 +666,21 @@ export default function MapScreen({ navigation }) {
               setIsSubmitting(true);
               const { data: { user } } = await supabase.auth.getUser();
               
+              let requestedTimeISO = matchedTimestamp || new Date().toISOString();
+              if (bookingTime) {
+                const match = bookingTime.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+                if (match) {
+                  let h = parseInt(match[1], 10);
+                  let m = parseInt(match[2], 10);
+                  const ampm = match[3].toUpperCase();
+                  if (ampm === 'PM' && h < 12) h += 12;
+                  if (ampm === 'AM' && h === 12) h = 0;
+                  const d = new Date();
+                  d.setHours(h, m, 0, 0);
+                  requestedTimeISO = d.toISOString();
+                }
+              }
+
               const response = await fetch(`${BASE_URL}/api/bookings/confirm`, {
                 method: "POST",
                 headers: {
@@ -677,7 +692,7 @@ export default function MapScreen({ navigation }) {
                   sellerId: provider.id && String(provider.id).startsWith("mock-") ? null : provider.id,
                   serviceType: matchedService,
                   location: matchedLocation,
-                  requestedTime: matchedTimestamp || new Date().toISOString(),
+                  requestedTime: requestedTimeISO,
                   price: finalPrice
                 })
               });
@@ -764,6 +779,21 @@ export default function MapScreen({ navigation }) {
         const serviceType = matchedService || provider.specialization || "Expert Services";
         const locationStr = matchedLocation || provider.location || "Karachi";
         
+        let requestedTimeISO = matchedTimestamp || new Date().toISOString();
+        if (provider.selectedSlot) {
+          const match = provider.selectedSlot.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+          if (match) {
+            let h = parseInt(match[1], 10);
+            let m = parseInt(match[2], 10);
+            const ampm = match[3].toUpperCase();
+            if (ampm === 'PM' && h < 12) h += 12;
+            if (ampm === 'AM' && h === 12) h = 0;
+            const d = new Date();
+            d.setHours(h, m, 0, 0);
+            requestedTimeISO = d.toISOString();
+          }
+        }
+
         const { data: newBooking, error: insertError } = await supabase
           .from("bookings")
           .insert([
@@ -772,7 +802,7 @@ export default function MapScreen({ navigation }) {
               seller_id: providerId,
               service_type: serviceType,
               location: locationStr,
-              requested_time: new Date().toISOString(),
+              requested_time: requestedTimeISO,
               price: dynamicPrice,
               status: "pending",
             }
@@ -1365,6 +1395,8 @@ export default function MapScreen({ navigation }) {
         <SafeAreaView style={{ flex: 1, backgroundColor: "#F7F9F8" }}>
           <KarigarSellerProfile
             provider={selectedProvider}
+            userRequestedTime={matchedTime}
+            userRequestedTimestamp={matchedTimestamp}
             onClose={() => setShowProfileModal(false)}
             onBook={(provider) => {
               setShowProfileModal(false);
