@@ -31,7 +31,7 @@ import {
   AlertCircle
 } from "lucide-react-native";
 import { supabase } from "../utils/supabase";
-import { syncBookingsAndManageReminders } from "../utils/notificationManager";
+import { syncBookingsAndManageReminders, showBookingConfirmedNotification } from "../utils/notificationManager";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 
@@ -144,6 +144,12 @@ export default function KarigarChat({ route, navigation }) {
   const MOCK_BUYER_UUID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
   const MOCK_SELLER_UUID = "ssssssss-ssss-4sss-8sss-ssssssssssss";
 
+  // Ref for Realtime channel to allow broadcasting
+  const chatChannelRef = useRef(null);
+  
+  // Track previous booking status to detect confirmation
+  const prevBookingStatusRef = useRef("pending");
+
   // Fetch Current User on Mount
   useEffect(() => {
     const initChat = async () => {
@@ -175,7 +181,9 @@ export default function KarigarChat({ route, navigation }) {
     const normBookingId = normalizeBookingIdForRealtime(bookingId);
     console.log("[Chat Realtime] Subscribing to booking_id:", normBookingId);
     const chatChannel = supabase
-      .channel(`chat-room-${normBookingId}`)
+      .channel(`chat-room-${normBookingId}`, {
+        config: { broadcast: { ack: true } }
+      })
       .on(
         "postgres_changes",
         {
@@ -184,37 +192,47 @@ export default function KarigarChat({ route, navigation }) {
           table: "chats",
           filter: `booking_id=eq.${normBookingId}`
         },
-        (payload) => {
-          console.log("[Chat Realtime] New message payload:", payload.new);
-          const msg = payload.new;
-          if (msg) {
-            const activeUserId = currentUserIdRef.current || (role === "buyer" ? MOCK_BUYER_UUID : MOCK_SELLER_UUID);
-            const safeSenderId = msg.sender_id ? String(msg.sender_id) : "";
-            const isBuyer = safeSenderId.includes("buyer") || safeSenderId === MOCK_BUYER_UUID || (role === "buyer" && safeSenderId === activeUserId);
-            
-            const newMsgFormatted = {
-              id: msg.id || Math.random(),
-              senderId: safeSenderId,
-              senderRole: isBuyer ? "buyer" : "seller",
-              text: msg.message ? String(msg.message) : "",
-              time: formatTime(msg.timestamp),
-              system: false
-            };
-
-            const merged = [...(global.appChatHistory[chatKey] || [])];
-            const existingTexts = new Set(merged.map(m => (m && m.text ? String(m.text).trim().toLowerCase() : "")));
-            const cleanText = newMsgFormatted.text ? String(newMsgFormatted.text).trim().toLowerCase() : "";
-            
-            if (cleanText && !existingTexts.has(cleanText)) {
-              merged.push(newMsgFormatted);
-              merged.sort((a, b) => String(a?.id || "").localeCompare(String(b?.id || "")));
-              updateMessages(merged);
-              setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
-            }
-          }
-        }
+        (payload) => handleIncomingPayload(payload.new)
+      )
+      .on(
+        "broadcast",
+        { event: "new_message" },
+        (payload) => handleIncomingPayload(payload.payload)
       )
       .subscribe();
+      
+    chatChannelRef.current = chatChannel;
+
+    const handleIncomingPayload = (msg) => {
+      if (!msg) return;
+      const activeUserId = currentUserIdRef.current || (role === "buyer" ? MOCK_BUYER_UUID : MOCK_SELLER_UUID);
+      const safeSenderId = msg.sender_id ? String(msg.sender_id) : (msg.senderId ? String(msg.senderId) : "");
+      
+      // Don't duplicate if it's our own broadcasted message
+      if (safeSenderId === activeUserId && msg.id && String(msg.id).startsWith("msg-")) return;
+
+      const isBuyer = safeSenderId.includes("buyer") || safeSenderId === MOCK_BUYER_UUID || (role === "buyer" && safeSenderId === activeUserId);
+      
+      const newMsgFormatted = {
+        id: msg.id || Math.random(),
+        senderId: safeSenderId,
+        senderRole: isBuyer ? "buyer" : "seller",
+        text: msg.message || msg.text ? String(msg.message || msg.text) : "",
+        time: msg.time || formatTime(msg.timestamp),
+        system: false
+      };
+
+      const merged = [...(global.appChatHistory[chatKey] || [])];
+      const existingTexts = new Set(merged.map(m => (m && m.text ? String(m.text).trim().toLowerCase() : "")));
+      const cleanText = newMsgFormatted.text ? String(newMsgFormatted.text).trim().toLowerCase() : "";
+      
+      if (cleanText && !existingTexts.has(cleanText)) {
+        merged.push(newMsgFormatted);
+        merged.sort((a, b) => String(a?.id || "").localeCompare(String(b?.id || "")));
+        updateMessages(merged);
+        setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
+      }
+    };
 
     // Setup polling for dynamic agreement & message syncing in development (as backup)
     const interval = setInterval(() => {
@@ -291,6 +309,13 @@ export default function KarigarChat({ route, navigation }) {
           setSellerAgreed(data.sellerAgreed);
           setBothAgreed(data.bothAgreed);
           if (data.booking) {
+            if (data.booking.status === "accepted" || data.booking.status === "confirmed") {
+              if (prevBookingStatusRef.current === "pending") {
+                showBookingConfirmedNotification(data.booking);
+              }
+            }
+            prevBookingStatusRef.current = data.booking.status;
+            
             setBookingStatus(data.booking.status);
             setNegotiationPrice(parseFloat(data.booking.price || dynamicQuote));
             loadOtherParticipantProfile(data.booking);
@@ -637,6 +662,15 @@ export default function KarigarChat({ route, navigation }) {
     updateMessages(updatedHistory);
     setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
 
+    // Broadcast immediately to peers
+    if (chatChannelRef.current) {
+      chatChannelRef.current.send({
+        type: "broadcast",
+        event: "new_message",
+        payload: newMsgLocal
+      }).catch(err => console.log("Broadcast error:", err));
+    }
+
     // Call Backend secure message endpoint
     try {
       setSending(true);
@@ -807,6 +841,7 @@ export default function KarigarChat({ route, navigation }) {
         const resData = await response.json();
         if (resData.success && resData.booking) {
           syncBookingsAndManageReminders([resData.booking]);
+          showBookingConfirmedNotification(resData.booking);
         }
       } else {
         // Mock booking countdown notification simulation (within 1 hour window to test immediately)

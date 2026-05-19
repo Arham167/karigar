@@ -28,7 +28,7 @@ import {
 } from "lucide-react-native";
 import { supabase } from "../utils/supabase";
 import { useAuthStore } from "../store/authStore";
-import { syncBookingsAndManageReminders } from "../utils/notificationManager";
+import { syncBookingsAndManageReminders, showBookingConfirmedNotification } from "../utils/notificationManager";
 
 const { width } = Dimensions.get("window");
 
@@ -46,6 +46,7 @@ export default function SellerDashboard({ navigation }) {
     rating: 4.9,
     onTime: "98%"
   });
+  const prevBookingsStatusRef = React.useRef({});
 
   // Polling for incoming chat notifications (Seller side)
   const [lastNotificationCheck, setLastNotificationCheck] = useState(new Date().toISOString());
@@ -76,6 +77,14 @@ export default function SellerDashboard({ navigation }) {
 
         // Sync local notification countdowns & background alarms
         syncBookingsAndManageReminders(userBookings);
+
+        userBookings.forEach(b => {
+          const prevStatus = prevBookingsStatusRef.current[b.id];
+          if (prevStatus && prevStatus === "pending" && (b.status === "accepted" || b.status === "confirmed")) {
+            showBookingConfirmedNotification(b);
+          }
+          prevBookingsStatusRef.current[b.id] = b.status;
+        });
 
         const bookingIds = userBookings.map(b => b.id);
 
