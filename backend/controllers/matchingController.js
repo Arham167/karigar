@@ -162,6 +162,9 @@ exports.matchProviders = async (req, res) => {
       }
 
       // 3. Check availability if a time is specified
+      // Define a global/scope block for debug logs to return in response
+      let matchDebugInfo = null;
+
       if (resolvedTimestamp && matchingProviders.length > 0) {
         const reqTime = new Date(resolvedTimestamp);
 
@@ -229,7 +232,21 @@ exports.matchProviders = async (req, res) => {
           return freeIntervals;
         };
 
+        const providerLogs = [];
+
         const availabilityPromises = matchingProviders.map(async (provider) => {
+          const logEntry = {
+            id: provider.id,
+            business_name: provider.business_name,
+            googleSheetsFetchSuccess: false,
+            fallbackUsed: false,
+            error: null,
+            sheetBookingsCount: 0,
+            freeIntervals: [],
+            isAvailable: false
+          };
+          providerLogs.push(logEntry);
+
           // --- PATH A: GOOGLE SHEETS CRM ---
           if (SPREADSHEET_ID) {
             try {
@@ -265,6 +282,11 @@ exports.matchProviders = async (req, res) => {
 
               console.log(`[Matching Engine] Provider ${provider.business_name} availability at requested time ${reqTime.toISOString()} is ${isAvailable}. Available slots: ${availableSlots.join(', ')}`);
 
+              logEntry.googleSheetsFetchSuccess = true;
+              logEntry.sheetBookingsCount = sheetBookings.length;
+              logEntry.freeIntervals = freeIntervals.map(i => `${i.start.toISOString()} - ${i.end.toISOString()}`);
+              logEntry.isAvailable = isAvailable;
+
               return {
                 ...provider,
                 available: isAvailable,
@@ -272,10 +294,12 @@ exports.matchProviders = async (req, res) => {
               };
             } catch (err) {
               console.error(`[Matching Engine] Google Sheet fetch failed for ${provider.business_name}, falling back to local DB:`, err.message);
+              logEntry.error = err.message;
             }
           }
 
           // --- PATH B: SUPABASE DB FALLBACK ---
+          logEntry.fallbackUsed = true;
           try {
             const { data: bookedSlots } = await supabase
               .from("booking_slots")
@@ -312,6 +336,9 @@ exports.matchProviders = async (req, res) => {
               });
             }).map(s => s.label);
 
+            logEntry.freeIntervals = freeIntervals.map(i => `${i.start.toISOString()} - ${i.end.toISOString()}`);
+            logEntry.isAvailable = isAvailable;
+
             return {
               ...provider,
               available: isAvailable,
@@ -319,6 +346,7 @@ exports.matchProviders = async (req, res) => {
             };
           } catch (slotError) {
             console.error(`[Matching Engine] Local slot fetching failed for provider ${provider.id}:`, slotError);
+            logEntry.error = `DB fallback failed: ${slotError.message}`;
             return { 
               ...provider, 
               available: true,
@@ -328,6 +356,18 @@ exports.matchProviders = async (req, res) => {
         });
 
         matchingProviders = await Promise.all(availabilityPromises);
+
+        // Assign to scope block to return in response
+        matchDebugInfo = {
+          sharedSpreadsheetId: SPREADSHEET_ID,
+          isSpreadsheetIdSet: !!SPREADSHEET_ID,
+          targetDateStr,
+          dayStart: dayStart.toISOString(),
+          dayEnd: dayEnd.toISOString(),
+          reqTime: reqTime.toISOString(),
+          jobEndTime: jobEndTime.toISOString(),
+          logs: providerLogs
+        };
       } else {
         // Assume available if no time is checked, return all slots free
         matchingProviders = matchingProviders.map(provider => ({
@@ -493,7 +533,8 @@ exports.matchProviders = async (req, res) => {
       service,
       time,
       location,
-      providers: topProviders
+      providers: topProviders,
+      debugInfo: matchDebugInfo
     });
 
   } catch (error) {
