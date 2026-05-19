@@ -248,7 +248,35 @@ function resolveTimeToDate(timeStr) {
   if (!timeStr) return new Date().toISOString();
   
   const clean = timeStr.toLowerCase().trim();
+  
+  // Format current date in Karachi time zone to parts
   const now = new Date();
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Karachi',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric',
+    second: 'numeric',
+    hour12: false
+  });
+  
+  const parts = formatter.formatToParts(now);
+  const getPart = type => parseInt(parts.find(p => p.type === type).value, 10);
+  
+  const year = getPart('year');
+  const month = getPart('month');
+  const day = getPart('day');
+  const hour = getPart('hour');
+  const minute = getPart('minute');
+  const second = getPart('second');
+
+  const createKarachiDate = (y, m, d, h, min = 0, s = 0) => {
+    return new Date(`${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}T${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}:${String(s).padStart(2, '0')}+05:00`);
+  };
+
+  const currentKarachi = createKarachiDate(year, month, day, hour, minute, second);
 
   // 1. Immediate / Urgent / Abhi
   if (
@@ -263,64 +291,114 @@ function resolveTimeToDate(timeStr) {
     return now.toISOString();
   }
 
+  // Helper to extract tomorrow's date parts in Karachi
+  const getTomorrowParts = () => {
+    const tom = new Date(currentKarachi.getTime() + 24 * 60 * 60 * 1000);
+    const tomParts = formatter.formatToParts(tom);
+    const getTomPart = type => parseInt(tomParts.find(p => p.type === type).value, 10);
+    return {
+      y: getTomPart('year'),
+      m: getTomPart('month'),
+      d: getTomPart('day')
+    };
+  };
+
   // 2. Tomorrow / Kal
   if (clean.includes("tomorrow") || clean.includes("kal")) {
-    const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const tom = getTomorrowParts();
+    let targetHour = 12;
     if (clean.includes("morning") || clean.includes("subah")) {
-      tomorrow.setHours(9, 0, 0, 0);
+      targetHour = 9;
     } else if (clean.includes("evening") || clean.includes("sham") || clean.includes("shaam")) {
-      tomorrow.setHours(17, 0, 0, 0);
+      targetHour = 17;
     } else if (clean.includes("afternoon") || clean.includes("dopahar")) {
-      tomorrow.setHours(13, 0, 0, 0);
-    } else {
-      tomorrow.setHours(12, 0, 0, 0);
+      targetHour = 13;
     }
-    return tomorrow.toISOString();
+    
+    // Check if there's a specific hour in the query too, e.g., "tomorrow 5 PM"
+    const matchHour = clean.match(/(\d+)/);
+    if (matchHour) {
+      let parsedHour = parseInt(matchHour[1], 10);
+      if (clean.includes("pm") && parsedHour < 12) {
+        parsedHour += 12;
+      } else if (clean.includes("am") && parsedHour === 12) {
+        parsedHour = 0;
+      } else if (clean.includes("sham") || clean.includes("shaam") || clean.includes("evening")) {
+        if (parsedHour < 12) parsedHour += 12;
+      }
+      targetHour = parsedHour;
+    }
+    
+    return createKarachiDate(tom.y, tom.m, tom.d, targetHour, 0, 0).toISOString();
   }
 
   // 3. Today / Aaj
   if (clean.includes("today") || clean.includes("aaj")) {
+    let targetHour = hour;
     if (clean.includes("morning") || clean.includes("subah")) {
-      now.setHours(9, 0, 0, 0);
+      targetHour = 9;
     } else if (clean.includes("evening") || clean.includes("sham") || clean.includes("shaam")) {
-      now.setHours(17, 0, 0, 0);
+      targetHour = 17;
     } else if (clean.includes("afternoon") || clean.includes("dopahar")) {
-      now.setHours(13, 0, 0, 0);
+      targetHour = 13;
     }
-    return now.toISOString();
+    
+    // Check if there's a specific hour, e.g., "today 5 PM"
+    const matchHour = clean.match(/(\d+)/);
+    if (matchHour) {
+      let parsedHour = parseInt(matchHour[1], 10);
+      if (clean.includes("pm") && parsedHour < 12) {
+        parsedHour += 12;
+      } else if (clean.includes("am") && parsedHour === 12) {
+        parsedHour = 0;
+      } else if (clean.includes("sham") || clean.includes("shaam") || clean.includes("evening")) {
+        if (parsedHour < 12) parsedHour += 12;
+      }
+      targetHour = parsedHour;
+    }
+    
+    return createKarachiDate(year, month, day, targetHour, 0, 0).toISOString();
   }
 
   // 4. Specific hours like "5 pm", "5 baje", "10 baje"
   const matchHour = clean.match(/(\d+)/);
   if (matchHour) {
-    let hour = parseInt(matchHour[1], 10);
-    if (clean.includes("pm") && hour < 12) {
-      hour += 12;
-    } else if (clean.includes("am") && hour === 12) {
-      hour = 0;
+    let targetHour = parseInt(matchHour[1], 10);
+    if (clean.includes("pm") && targetHour < 12) {
+      targetHour += 12;
+    } else if (clean.includes("am") && targetHour === 12) {
+      targetHour = 0;
     } else if (clean.includes("sham") || clean.includes("shaam") || clean.includes("evening")) {
-      if (hour < 12) hour += 12; // 5 baje sham -> 17:00
+      if (targetHour < 12) targetHour += 12;
     }
-    now.setHours(hour, 0, 0, 0);
-    // If that hour already passed today, schedule it for tomorrow
-    if (now.getTime() < Date.now()) {
-      now.setDate(now.getDate() + 1);
+    
+    let resolvedDate = createKarachiDate(year, month, day, targetHour, 0, 0);
+    // If that hour already passed today in Karachi, schedule it for tomorrow
+    if (resolvedDate.getTime() < currentKarachi.getTime()) {
+      const tom = getTomorrowParts();
+      resolvedDate = createKarachiDate(tom.y, tom.m, tom.d, targetHour, 0, 0);
     }
-    return now.toISOString();
+    return resolvedDate.toISOString();
   }
 
   // 5. Morning / Subah fallback
   if (clean.includes("morning") || clean.includes("subah")) {
-    now.setHours(9, 0, 0, 0);
-    if (now.getTime() < Date.now()) now.setDate(now.getDate() + 1);
-    return now.toISOString();
+    let resolvedDate = createKarachiDate(year, month, day, 9, 0, 0);
+    if (resolvedDate.getTime() < currentKarachi.getTime()) {
+      const tom = getTomorrowParts();
+      resolvedDate = createKarachiDate(tom.y, tom.m, tom.d, 9, 0, 0);
+    }
+    return resolvedDate.toISOString();
   }
 
   // 6. Evening / Sham fallback
   if (clean.includes("evening") || clean.includes("sham") || clean.includes("shaam")) {
-    now.setHours(17, 0, 0, 0);
-    if (now.getTime() < Date.now()) now.setDate(now.getDate() + 1);
-    return now.toISOString();
+    let resolvedDate = createKarachiDate(year, month, day, 17, 0, 0);
+    if (resolvedDate.getTime() < currentKarachi.getTime()) {
+      const tom = getTomorrowParts();
+      resolvedDate = createKarachiDate(tom.y, tom.m, tom.d, 17, 0, 0);
+    }
+    return resolvedDate.toISOString();
   }
 
   return now.toISOString();
