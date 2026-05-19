@@ -44,14 +44,15 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "e42f2c8f-251e-4a03-93c8-6f75f41b01e2"
+        "projectId": "2aeb01ba-c249-4f9d-b2e8-06d5b9f073ed"
       }
     },
     "runtimeVersion": {
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/e42f2c8f-251e-4a03-93c8-6f75f41b01e2"
-    }
+      "url": ""
+    },
+    "owner": "arham207"
   }
 }
