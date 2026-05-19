@@ -773,27 +773,29 @@ export default function MapScreen({ navigation }) {
         booking = data[0];
       }
 
+      const dynamicPrice = provider.dynamicPrice || 1200;
+      const serviceType = matchedService || provider.specialization || "Expert Services";
+      const locationStr = matchedLocation || provider.location || "Karachi";
+      
+      let requestedTimeISO = matchedTimestamp || new Date().toISOString();
+      if (provider.selectedSlot) {
+        // Extract just the start time if it's a range like "09:00 AM - 11:00 AM"
+        const cleanSlot = provider.selectedSlot.split(' - ')[0].trim();
+        const match = cleanSlot.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+        if (match) {
+          let h = parseInt(match[1], 10);
+          let m = parseInt(match[2], 10);
+          const ampm = match[3].toUpperCase();
+          if (ampm === 'PM' && h < 12) h += 12;
+          if (ampm === 'AM' && h === 12) h = 0;
+          const d = new Date();
+          d.setHours(h, m, 0, 0);
+          requestedTimeISO = d.toISOString();
+        }
+      }
+
       // If no pending booking exists, create one
       if (!booking) {
-        const dynamicPrice = provider.dynamicPrice || 1200;
-        const serviceType = matchedService || provider.specialization || "Expert Services";
-        const locationStr = matchedLocation || provider.location || "Karachi";
-        
-        let requestedTimeISO = matchedTimestamp || new Date().toISOString();
-        if (provider.selectedSlot) {
-          const match = provider.selectedSlot.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
-          if (match) {
-            let h = parseInt(match[1], 10);
-            let m = parseInt(match[2], 10);
-            const ampm = match[3].toUpperCase();
-            if (ampm === 'PM' && h < 12) h += 12;
-            if (ampm === 'AM' && h === 12) h = 0;
-            const d = new Date();
-            d.setHours(h, m, 0, 0);
-            requestedTimeISO = d.toISOString();
-          }
-        }
-
         const { data: newBooking, error: insertError } = await supabase
           .from("bookings")
           .insert([
@@ -802,15 +804,37 @@ export default function MapScreen({ navigation }) {
               seller_id: providerId,
               service_type: serviceType,
               location: locationStr,
-              requested_time: requestedTimeISO,
               price: dynamicPrice,
               status: "pending",
+              requested_time: requestedTimeISO
             }
           ])
-          .select();
+          .select()
+          .single();
 
-        if (insertError) throw insertError;
-        booking = newBooking[0];
+        if (insertError) {
+          console.log("Error creating booking:", insertError);
+          setIsSubmitting(false);
+          return;
+        }
+        booking = newBooking;
+      } else {
+        // Update existing pending booking with the latest search parameters!
+        const { data: updatedBooking, error: updateError } = await supabase
+          .from("bookings")
+          .update({
+            service_type: serviceType,
+            location: locationStr,
+            price: dynamicPrice,
+            requested_time: requestedTimeISO
+          })
+          .eq("id", booking.id)
+          .select()
+          .single();
+          
+        if (!updateError && updatedBooking) {
+          booking = updatedBooking;
+        }
       }
 
       // Navigate to KarigarChat screen with real booking details
