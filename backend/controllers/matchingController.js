@@ -164,13 +164,70 @@ exports.matchProviders = async (req, res) => {
       // 3. Check availability if a time is specified
       if (resolvedTimestamp && matchingProviders.length > 0) {
         const reqTime = new Date(resolvedTimestamp);
-        
-        // Define a 2-hour window around the requested time
-        const startTimeWindow = new Date(reqTime.getTime() - 2 * 60 * 60 * 1000);
-        const endTimeWindow = new Date(reqTime.getTime() + 2 * 60 * 60 * 1000);
 
         const googleSheets = require("../utils/googleSheets");
         const SPREADSHEET_ID = process.env.SHARED_GOOGLE_SHEET_ID;
+
+        // Convert request time to Karachi date string (YYYY-MM-DD)
+        const targetDateStr = new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'Asia/Karachi',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit'
+        }).format(reqTime);
+
+        // Define working day bounds for the target day (09:00 AM to 09:00 PM)
+        const dayStart = new Date(`${targetDateStr}T09:00:00+05:00`);
+        const dayEnd = new Date(`${targetDateStr}T21:00:00+05:00`);
+
+        // Standard job duration (2 hours)
+        const jobDurationMs = 2 * 60 * 60 * 1000;
+        const jobEndTime = new Date(reqTime.getTime() + jobDurationMs);
+
+        // Helper function to compute free intervals
+        const calculateFreeIntervals = (bookings, startBound, endBound) => {
+          const busyBookings = bookings.filter(b => {
+            const isBusy = b.status === 'booked' || b.status === 'blocked';
+            if (!isBusy) return false;
+            
+            // Check if it's on the target day
+            const bookingDay = new Intl.DateTimeFormat('en-CA', {
+              timeZone: 'Asia/Karachi',
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit'
+            }).format(b.startTime);
+            
+            return bookingDay === targetDateStr;
+          });
+
+          // Sort bookings chronologically by startTime
+          const sorted = [...busyBookings].sort((a, b) => a.startTime - b.startTime);
+          const freeIntervals = [];
+
+          let currentStart = new Date(startBound);
+
+          for (const booking of sorted) {
+            if (booking.startTime > currentStart) {
+              freeIntervals.push({
+                start: new Date(currentStart),
+                end: new Date(booking.startTime)
+              });
+            }
+            if (booking.endTime > currentStart) {
+              currentStart = new Date(booking.endTime);
+            }
+          }
+
+          if (currentStart < endBound) {
+            freeIntervals.push({
+              start: new Date(currentStart),
+              end: new Date(endBound)
+            });
+          }
+
+          return freeIntervals;
+        };
 
         const availabilityPromises = matchingProviders.map(async (provider) => {
           // --- PATH A: GOOGLE SHEETS CRM ---
@@ -179,22 +236,15 @@ exports.matchProviders = async (req, res) => {
               console.log(`[Matching Engine] Reading live calendar from Google Sheet for provider: ${provider.business_name}`);
               const sheetBookings = await googleSheets.fetchSellerCalendar(SPREADSHEET_ID, 'Sheet1!A2:I100', provider.id, provider.business_name);
               
-              // Overlap check: Slot starts before window ends, and ends after window starts
-              const hasOverlap = sheetBookings.some(slot => {
-                const isBusy = slot.status === 'booked' || slot.status === 'blocked';
-                if (!isBusy) return false;
-                return slot.startTime < endTimeWindow && slot.endTime > startTimeWindow;
+              const freeIntervals = calculateFreeIntervals(sheetBookings, dayStart, dayEnd);
+              console.log(`[Matching Engine] Computed free intervals for ${provider.business_name}:`, freeIntervals.map(i => `${i.start.toISOString()} - ${i.end.toISOString()}`));
+
+              // Check if the requested job window fits within one of the free intervals
+              const isAvailable = freeIntervals.some(interval => {
+                return reqTime >= interval.start && jobEndTime <= interval.end;
               });
 
               // --- DYNAMICALLY COMPUTE AVAILABLE SLOTS ON TARGET DAY ---
-              // Convert request time to Karachi date string (YYYY-MM-DD)
-              const targetDateStr = new Intl.DateTimeFormat('en-CA', {
-                timeZone: 'Asia/Karachi',
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit'
-              }).format(reqTime);
-
               const standardSlots = [
                 { start: '09:00', end: '11:00', label: '09:00 AM - 11:00 AM' },
                 { start: '11:00', end: '13:00', label: '11:00 AM - 01:00 PM' },
@@ -208,29 +258,16 @@ exports.matchProviders = async (req, res) => {
                 const slotStart = new Date(`${targetDateStr}T${slot.start}:00+05:00`);
                 const slotEnd = new Date(`${targetDateStr}T${slot.end}:00+05:00`);
                 
-                const slotOverlap = sheetBookings.some(booking => {
-                  const isBusy = booking.status === 'booked' || booking.status === 'blocked';
-                  if (!isBusy) return false;
-                  
-                  // Convert booking start time to Karachi date string
-                  const bookingDay = new Intl.DateTimeFormat('en-CA', {
-                    timeZone: 'Asia/Karachi',
-                    year: 'numeric',
-                    month: '2-digit',
-                    day: '2-digit'
-                  }).format(booking.startTime);
-
-                  if (bookingDay !== targetDateStr) return false;
-                  
-                  return booking.startTime < slotEnd && booking.endTime > slotStart;
+                return freeIntervals.some(interval => {
+                  return slotStart >= interval.start && slotEnd <= interval.end;
                 });
-                
-                return !slotOverlap;
               }).map(s => s.label);
+
+              console.log(`[Matching Engine] Provider ${provider.business_name} availability at requested time ${reqTime.toISOString()} is ${isAvailable}. Available slots: ${availableSlots.join(', ')}`);
 
               return {
                 ...provider,
-                available: !hasOverlap,
+                available: isAvailable,
                 available_slots: availableSlots
               };
             } catch (err) {
@@ -242,15 +279,43 @@ exports.matchProviders = async (req, res) => {
           try {
             const { data: bookedSlots } = await supabase
               .from("booking_slots")
-              .select("id")
+              .select("start_time, end_time, status")
               .eq("provider_id", provider.id)
-              .eq("status", "booked")
-              .or(`start_time.gte.${startTimeWindow.toISOString()},end_time.lte.${endTimeWindow.toISOString()}`);
-            
+              .eq("status", "booked");
+
+            const formattedBookings = (bookedSlots || []).map(slot => ({
+              startTime: new Date(slot.start_time),
+              endTime: new Date(slot.end_time),
+              status: slot.status
+            }));
+
+            const freeIntervals = calculateFreeIntervals(formattedBookings, dayStart, dayEnd);
+            const isAvailable = freeIntervals.some(interval => {
+              return reqTime >= interval.start && jobEndTime <= interval.end;
+            });
+
+            const standardSlots = [
+              { start: '09:00', end: '11:00', label: '09:00 AM - 11:00 AM' },
+              { start: '11:00', end: '13:00', label: '11:00 AM - 01:00 PM' },
+              { start: '13:00', end: '15:00', label: '01:00 PM - 03:00 PM' },
+              { start: '15:00', end: '17:00', label: '03:00 PM - 05:00 PM' },
+              { start: '17:00', end: '19:00', label: '05:00 PM - 07:00 PM' },
+              { start: '19:00', end: '21:00', label: '07:00 PM - 09:00 PM' }
+            ];
+
+            const availableSlots = standardSlots.filter(slot => {
+              const slotStart = new Date(`${targetDateStr}T${slot.start}:00+05:00`);
+              const slotEnd = new Date(`${targetDateStr}T${slot.end}:00+05:00`);
+              
+              return freeIntervals.some(interval => {
+                return slotStart >= interval.start && slotEnd <= interval.end;
+              });
+            }).map(s => s.label);
+
             return {
               ...provider,
-              available: !bookedSlots || bookedSlots.length === 0,
-              available_slots: ['09:00 AM - 11:00 AM', '01:00 PM - 03:00 PM', '05:00 PM - 07:00 PM']
+              available: isAvailable,
+              available_slots: availableSlots
             };
           } catch (slotError) {
             console.error(`[Matching Engine] Local slot fetching failed for provider ${provider.id}:`, slotError);
