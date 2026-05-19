@@ -276,44 +276,9 @@ exports.agreeToBook = async (req, res) => {
     const finalBooking = updatedBooking[0];
     const bothAgreed = finalBooking.buyer_agreed && finalBooking.seller_agreed;
 
-    // IF AGREEMENT IS SUCCESSFUL, SYNC BOOKING TO GOOGLE SHEETS
+    // IF AGREEMENT IS SUCCESSFUL, SYNC TO GOOGLE SHEETS WILL HAPPEN ON CONFIRMATION
     if (bothAgreed) {
-      // Run async in background so we don't block the API response
-      (async () => {
-        try {
-          const SPREADSHEET_ID = process.env.SHARED_GOOGLE_SHEET_ID;
-
-          if (SPREADSHEET_ID) {
-            // Fetch provider profile to get business_name
-            const { data: provider } = await supabase
-              .from("providers")
-              .select("business_name")
-              .eq("id", finalBooking.seller_id || finalBooking.provider_id)
-              .single();
-
-            console.log(`[Chat Controller] Syncing confirmed booking to Google Sheet for ${provider ? provider.business_name : 'Seller'}`);
-            
-            // Get buyer's name for client information
-            const { data: buyerProfile } = await supabase
-              .from("profiles")
-              .select("name")
-              .eq("id", finalBooking.buyer_id)
-              .single();
-
-            await googleSheets.appendBookingToSheet(SPREADSHEET_ID, {
-              confirmedTime: finalBooking.confirmed_time || new Date(),
-              requestedTime: finalBooking.requested_time || new Date(),
-              buyerName: buyerProfile ? buyerProfile.name : "Client via Karigar",
-              serviceType: finalBooking.service_type || "Service Request",
-              location: finalBooking.location || "Karachi",
-              sellerId: finalBooking.seller_id || finalBooking.provider_id,
-              sellerBusinessName: provider ? provider.business_name : "Professional Karigar"
-            });
-          }
-        } catch (syncErr) {
-          console.error("[Chat Controller] Background Google Sheet sync failed:", syncErr.message);
-        }
-      })();
+      console.log(`[Chat Controller] Price negotiation finalized. Ready for booking checkout.`);
     }
 
     return res.status(200).json({

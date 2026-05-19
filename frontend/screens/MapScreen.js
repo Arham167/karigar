@@ -165,6 +165,7 @@ export default function MapScreen({ navigation }) {
   const [matchedService, setMatchedService] = useState("");
   const [matchedTime, setMatchedTime] = useState("");
   const [matchedLocation, setMatchedLocation] = useState("");
+  const [matchedTimestamp, setMatchedTimestamp] = useState(null);
 
   // User Profile States
   const [profileImage, setProfileImage] = useState("https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=400&auto=format&fit=crop");
@@ -592,6 +593,7 @@ export default function MapScreen({ navigation }) {
         setMatchedService(service.value);
         setMatchedTime(time.value);
         setMatchedLocation(parsedLocation.value);
+        setMatchedTimestamp(time.resolvedTimestamp || new Date().toISOString());
         setShowMatches(true);
 
         // Zoom the map to fit user and markers
@@ -658,20 +660,26 @@ export default function MapScreen({ navigation }) {
               setIsSubmitting(true);
               const { data: { user } } = await supabase.auth.getUser();
               
-              // Add an accepted booking in Supabase
-              const { error } = await supabase.from("bookings").insert([
-                {
-                  buyer_id: user.id,
-                  seller_id: provider.id && String(provider.id).startsWith("mock-") ? null : provider.id, // Only use real provider ID if not mock
-                  service_type: matchedService,
-                  location: matchedLocation,
-                  requested_time: new Date().toISOString(),
-                  price: finalPrice,
-                  status: "confirmed",
+              const response = await fetch(`${BASE_URL}/api/bookings/confirm`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Bypass-Tunnel-Reminder": "true"
                 },
-              ]);
+                body: JSON.stringify({
+                  buyerId: user.id,
+                  sellerId: provider.id && String(provider.id).startsWith("mock-") ? null : provider.id,
+                  serviceType: matchedService,
+                  location: matchedLocation,
+                  requestedTime: matchedTimestamp || new Date().toISOString(),
+                  price: finalPrice
+                })
+              });
 
-              if (error) throw error;
+              if (!response.ok) {
+                const errData = await response.json();
+                throw new Error(errData.error || "Failed to confirm booking on server.");
+              }
 
               showCustomAlert(
                 "Booking Confirmed! 🎉",

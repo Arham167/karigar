@@ -140,7 +140,8 @@ async function fetchSellerCalendar(spreadsheetId, range = 'Sheet1!A2:I100', sell
  */
 async function appendBookingToSheet(spreadsheetId, booking) {
   try {
-    const dateObj = new Date(booking.confirmedTime || booking.requestedTime || new Date());
+    // Prioritize the requested booking time (which is the actual scheduled time), fallback to confirmedTime or now
+    const dateObj = new Date(booking.requestedTime || booking.confirmedTime || new Date());
     
     // Format date in Karachi timezone (YYYY-MM-DD)
     const dateStr = new Intl.DateTimeFormat('en-CA', {
@@ -157,12 +158,20 @@ async function appendBookingToSheet(spreadsheetId, booking) {
       hour12: false
     };
     
-    // Format times into HH:MM standard in Karachi timezone
+    // Format starting time into HH:MM standard in Karachi timezone
     const startStr = new Intl.DateTimeFormat('en-GB', timeOptions).format(dateObj);
     
-    // Default 2-hour duration for the booking
-    const endObj = new Date(dateObj.getTime() + 2 * 60 * 60 * 1000);
-    const endStr = new Intl.DateTimeFormat('en-GB', timeOptions).format(endObj);
+    // Determine the ending time: use requested end time if specified, otherwise default to 2 hours later
+    let endStr;
+    const endInput = booking.endTime || booking.endingTime;
+    if (endInput) {
+      const endObj = new Date(endInput);
+      endStr = new Intl.DateTimeFormat('en-GB', timeOptions).format(endObj);
+    } else {
+      // Default 2-hour duration for the booking
+      const endObj = new Date(dateObj.getTime() + 2 * 60 * 60 * 1000);
+      endStr = new Intl.DateTimeFormat('en-GB', timeOptions).format(endObj);
+    }
 
     const values = [
       [
@@ -187,7 +196,7 @@ async function appendBookingToSheet(spreadsheetId, booking) {
       },
     });
 
-    console.log(`[Google Sheets Service] Synced booking for provider sheet ${spreadsheetId} successfully.`);
+    console.log(`[Google Sheets Service] Synced booking for provider sheet ${spreadsheetId} successfully. Date: ${dateStr}, Start: ${startStr}, End: ${endStr}`);
     return response.data;
   } catch (error) {
     console.error(`[Google Sheets Service] Error writing booking to spreadsheet ${spreadsheetId}:`, error.message);

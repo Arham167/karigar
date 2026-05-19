@@ -738,19 +738,25 @@ export default function KarigarChat({ route, navigation }) {
       setLoading(true);
 
       if (bookingId && !String(bookingId).startsWith("mock-booking")) {
-        const { error } = await supabase
-          .from("bookings")
-          .update({
-            status: "confirmed",
-            confirmed_time: new Date().toISOString(),
+        const response = await fetch(`${BASE_URL}/api/bookings/confirm`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Bypass-Tunnel-Reminder": "true"
+          },
+          body: JSON.stringify({
+            bookingId: bookingId,
             price: negotiationPrice
           })
-          .eq("id", bookingId);
+        });
 
-        if (error) throw error;
+        if (!response.ok) {
+          const errData = await response.json();
+          throw new Error(errData.error || "Failed to confirm booking on server.");
+        }
       }
 
-      setBookingStatus("confirmed");
+      setBookingStatus("accepted");
       setShowSuccessModal(true);
 
     } catch (err) {
