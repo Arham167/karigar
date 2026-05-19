@@ -67,6 +67,7 @@ function geocodeAddress(address) {
  * }
  */
 exports.matchProviders = async (req, res) => {
+  let matchDebugInfo = null;
   try {
     const { service, time, resolvedTimestamp, location, latitude, longitude } = req.body;
 
@@ -163,7 +164,6 @@ exports.matchProviders = async (req, res) => {
 
       // 3. Check availability if a time is specified
       // Define a global/scope block for debug logs to return in response
-      let matchDebugInfo = null;
 
       if (resolvedTimestamp && matchingProviders.length > 0) {
         const reqTime = new Date(resolvedTimestamp);
