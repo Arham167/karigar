@@ -42,6 +42,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { supabase } from "../utils/supabase";
 import { useAuthStore } from "../store/authStore";
 import KarigarSellerProfile from "./KarigarSellerProfile";
+import { syncBookingsAndManageReminders } from "../utils/notificationManager";
 import {
   useFonts,
   DMSans_400Regular,
@@ -217,8 +218,12 @@ export default function MapScreen({ navigation }) {
         // Fetch buyer's bookings
         const { data: userBookings } = await supabase
           .from("bookings")
-          .select("id, service_type, seller_id, buyer_id")
+          .select("id, service_type, seller_id, buyer_id, price, status, requested_time, confirmed_time")
           .eq("buyer_id", user.id);
+
+        if (userBookings && userBookings.length > 0) {
+          syncBookingsAndManageReminders(userBookings);
+        }
 
         if (!userBookings || userBookings.length === 0) return;
 
@@ -455,6 +460,7 @@ export default function MapScreen({ navigation }) {
         }
         
         setBookings(bookingsWithProviders);
+        syncBookingsAndManageReminders(bookingsWithProviders);
       }
     } catch (err) {
       console.log("Error loading bookings:", err);
@@ -679,6 +685,11 @@ export default function MapScreen({ navigation }) {
               if (!response.ok) {
                 const errData = await response.json();
                 throw new Error(errData.error || "Failed to confirm booking on server.");
+              }
+
+              const resData = await response.json();
+              if (resData.success && resData.booking) {
+                syncBookingsAndManageReminders([resData.booking]);
               }
 
               showCustomAlert(

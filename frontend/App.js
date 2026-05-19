@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { initNotifications } from "./utils/notificationManager";
 
 import AuthScreen from "./screens/AuthScreen";
 import SignupScreen from "./screens/SignupScreen";
@@ -16,6 +17,10 @@ import KarigarChat from "./screens/KarigarChat";
 const Stack = createNativeStackNavigator();
 
 export default function App() {
+  useEffect(() => {
+    initNotifications();
+  }, []);
+
   return (
     <SafeAreaProvider>
       <NavigationContainer>

@@ -28,6 +28,7 @@ import {
 } from "lucide-react-native";
 import { supabase } from "../utils/supabase";
 import { useAuthStore } from "../store/authStore";
+import { syncBookingsAndManageReminders } from "../utils/notificationManager";
 
 const { width } = Dimensions.get("window");
 
@@ -68,10 +69,13 @@ export default function SellerDashboard({ navigation }) {
         // Fetch seller's bookings
         const { data: userBookings } = await supabase
           .from("bookings")
-          .select("id, service_type, seller_id, buyer_id, price")
+          .select("id, service_type, seller_id, buyer_id, price, status, requested_time, confirmed_time")
           .eq("seller_id", activeSellerId);
 
         if (!userBookings || userBookings.length === 0) return;
+
+        // Sync local notification countdowns & background alarms
+        syncBookingsAndManageReminders(userBookings);
 
         const bookingIds = userBookings.map(b => b.id);
 
@@ -165,6 +169,11 @@ export default function SellerDashboard({ navigation }) {
         .order("created_at", { ascending: false });
 
       if (bookingsError) throw bookingsError;
+
+      if (bookings) {
+        // Sync local notification countdowns & background alarms
+        syncBookingsAndManageReminders(bookings);
+      }
 
       if (bookings && bookings.length > 0) {
         // Fetch buyer names for these bookings

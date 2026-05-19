@@ -31,6 +31,7 @@ import {
   AlertCircle
 } from "lucide-react-native";
 import { supabase } from "../utils/supabase";
+import { syncBookingsAndManageReminders } from "../utils/notificationManager";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 
@@ -754,6 +755,22 @@ export default function KarigarChat({ route, navigation }) {
           const errData = await response.json();
           throw new Error(errData.error || "Failed to confirm booking on server.");
         }
+
+        const resData = await response.json();
+        if (resData.success && resData.booking) {
+          syncBookingsAndManageReminders([resData.booking]);
+        }
+      } else {
+        // Mock booking countdown notification simulation (within 1 hour window to test immediately)
+        const mockBooking = {
+          id: bookingId,
+          status: "accepted",
+          service_type: provider?.specialization || "Plumber Repair",
+          location: provider?.location || "Gulshan, Karachi",
+          price: negotiationPrice,
+          requested_time: new Date(Date.now() + 55 * 60 * 1000).toISOString()
+        };
+        syncBookingsAndManageReminders([mockBooking]);
       }
 
       setBookingStatus("accepted");
