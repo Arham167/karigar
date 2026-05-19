@@ -578,7 +578,24 @@ export default function KarigarChat({ route, navigation }) {
       try {
         const d = new Date(timeVal);
         if (!isNaN(d.getTime())) {
-          return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+          // Force formatting to Karachi Time (UTC+5) robustly without relying on Android Intl ICU data
+          const utcMs = d.getTime();
+          const pkMs = utcMs + (5 * 60 * 60 * 1000);
+          const pkDate = new Date(pkMs);
+          
+          const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+          const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+          
+          const dayName = days[pkDate.getUTCDay()];
+          const monthName = months[pkDate.getUTCMonth()];
+          const dateNum = pkDate.getUTCDate();
+          
+          let h = pkDate.getUTCHours();
+          const m = pkDate.getUTCMinutes().toString().padStart(2, '0');
+          const ampm = h >= 12 ? 'PM' : 'AM';
+          h = h % 12 || 12;
+          
+          return `${dayName}, ${monthName} ${dateNum}, ${h}:${m} ${ampm}`;
         }
       } catch (e) {
         return timeVal;

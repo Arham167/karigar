@@ -857,7 +857,8 @@ const styles = StyleSheet.create({
     backgroundColor: "white",
     borderRadius: 12,
     paddingVertical: 10,
-    width: (SCREEN_W - 40) / 2.2,
+    paddingHorizontal: 16,
+    minWidth: (SCREEN_W - 56) / 2, // Ensures exactly 2 fit nicely if text is small, but expands if needed
     borderWidth: 1.5,
     borderColor: "#E5E7EB",
   },
@@ -872,8 +873,9 @@ const styles = StyleSheet.create({
   },
   slotChipText: {
     fontFamily: "DMSans_700Bold",
-    fontSize: 13,
+    fontSize: 12,
     color: "#4B5563",
+    textAlign: "center",
   },
   slotChipTextActive: {
     color: "white",
