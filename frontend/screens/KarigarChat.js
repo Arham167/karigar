@@ -551,7 +551,11 @@ export default function KarigarChat({ route, navigation }) {
 
   const formatTime = (isoString) => {
     try {
-      const d = new Date(isoString);
+      let safeIso = isoString;
+      if (typeof safeIso === 'string' && !safeIso.endsWith('Z') && !safeIso.includes('+') && safeIso.includes('T')) {
+        safeIso += 'Z';
+      }
+      const d = new Date(safeIso);
       let h = d.getHours();
       const m = d.getMinutes().toString().padStart(2, "0");
       const ampm = h >= 12 ? "PM" : "AM";
@@ -576,7 +580,14 @@ export default function KarigarChat({ route, navigation }) {
     // Check if it's an ISO date string
     if (timeVal.includes('T') && (timeVal.includes('Z') || timeVal.includes('+') || timeVal.includes('-'))) {
       try {
-        const d = new Date(timeVal);
+        // Supabase `timestamp` often lacks the trailing 'Z' making JS parse it as local time.
+        // We ensure it is parsed as UTC by appending 'Z' if it's not already there.
+        let safeTimeVal = timeVal;
+        if (!safeTimeVal.endsWith('Z') && !safeTimeVal.includes('+') && safeTimeVal.split('T')[1]?.length <= 12) {
+          safeTimeVal += 'Z';
+        }
+
+        const d = new Date(safeTimeVal);
         if (!isNaN(d.getTime())) {
           // Force formatting to Karachi Time (UTC+5) robustly without relying on Android Intl ICU data
           const utcMs = d.getTime();
