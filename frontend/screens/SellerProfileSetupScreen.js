@@ -13,6 +13,7 @@ import {
   Modal,
   TouchableWithoutFeedback,
   Keyboard,
+  KeyboardAvoidingView,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path, Rect, Circle, Polyline, G } from "react-native-svg";
@@ -439,14 +440,18 @@ export default function SellerProfileSetupScreen({ navigation }) {
         </View>
       </View>
 
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        showsVerticalScrollIndicator={false}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
       >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-          <View style={{ width: "100%" }}>
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1 }}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          showsVerticalScrollIndicator={false}
+        >
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+            <View style={[styles.scrollContent, { flex: 1 }]}>
         <View style={styles.headingContainer}>
           <Text style={styles.title}>Complete your Seller profile</Text>
           <Text style={styles.subtitle}>
@@ -550,9 +555,10 @@ export default function SellerProfileSetupScreen({ navigation }) {
 
         {/* Bottom Spacer */}
         <View style={{ height: 120 }} />
-          </View>
-        </TouchableWithoutFeedback>
-      </ScrollView>
+            </View>
+          </TouchableWithoutFeedback>
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       <View style={[styles.bottomCta, { paddingBottom: Math.max(insets.bottom, 20) }]}>
         <TouchableOpacity 

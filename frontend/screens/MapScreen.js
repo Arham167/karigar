@@ -14,11 +14,10 @@ import {
   ScrollView,
   Alert,
   Modal,
-  SafeAreaView,
   Keyboard,
   TouchableWithoutFeedback,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import MapView, { Marker } from "react-native-maps";
 import * as Location from "expo-location";
 import {

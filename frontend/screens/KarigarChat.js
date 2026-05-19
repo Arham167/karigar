@@ -5,7 +5,6 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   StatusBar,
   ScrollView,
   KeyboardAvoidingView,
@@ -16,6 +15,7 @@ import {
   Modal,
   Image,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import {
   ArrowLeft,
   Send,
@@ -48,6 +48,20 @@ function getNormalizedChatKey(bId) {
   if (strId.includes("mock-booking-3") || strId.includes("mock-3")) return "mock-booking-3";
   if (strId.startsWith("mock-")) return "mock-booking-1";
   return strId;
+}
+
+function normalizeBookingIdForRealtime(id) {
+  if (id === null || id === undefined) return 9991;
+  const strId = String(id);
+  if (strId.includes("mock-booking-1") || strId.includes("mock-1")) return 9991;
+  if (strId.includes("mock-booking-2") || strId.includes("mock-2")) return 9992;
+  if (strId.includes("mock-booking-3") || strId.includes("mock-3")) return 9993;
+  if (strId.startsWith("mock-")) return 9991;
+  
+  if (/^\d+$/.test(strId)) {
+    return parseInt(strId, 10);
+  }
+  return id;
 }
 
 export default function KarigarChat({ route, navigation }) {
@@ -155,13 +169,61 @@ export default function KarigarChat({ route, navigation }) {
 
     initChat();
 
-    // Setup polling for dynamic agreement & message syncing in development
+    // Setup Supabase Realtime channel subscription for immediate instant updates
+    const normBookingId = normalizeBookingIdForRealtime(bookingId);
+    console.log("[Chat Realtime] Subscribing to booking_id:", normBookingId);
+    const chatChannel = supabase
+      .channel(`chat-room-${normBookingId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "chats",
+          filter: `booking_id=eq.${normBookingId}`
+        },
+        (payload) => {
+          console.log("[Chat Realtime] New message payload:", payload.new);
+          const msg = payload.new;
+          if (msg) {
+            const activeUserId = currentUserIdRef.current || (role === "buyer" ? MOCK_BUYER_UUID : MOCK_SELLER_UUID);
+            const safeSenderId = msg.sender_id ? String(msg.sender_id) : "";
+            const isBuyer = safeSenderId.includes("buyer") || safeSenderId === MOCK_BUYER_UUID || (role === "buyer" && safeSenderId === activeUserId);
+            
+            const newMsgFormatted = {
+              id: msg.id || Math.random(),
+              senderId: safeSenderId,
+              senderRole: isBuyer ? "buyer" : "seller",
+              text: msg.message ? String(msg.message) : "",
+              time: formatTime(msg.timestamp),
+              system: false
+            };
+
+            const merged = [...(global.appChatHistory[chatKey] || [])];
+            const existingTexts = new Set(merged.map(m => (m && m.text ? String(m.text).trim().toLowerCase() : "")));
+            const cleanText = newMsgFormatted.text ? String(newMsgFormatted.text).trim().toLowerCase() : "";
+            
+            if (cleanText && !existingTexts.has(cleanText)) {
+              merged.push(newMsgFormatted);
+              merged.sort((a, b) => String(a?.id || "").localeCompare(String(b?.id || "")));
+              updateMessages(merged);
+              setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    // Setup polling for dynamic agreement & message syncing in development (as backup)
     const interval = setInterval(() => {
       fetchAgreementStatus();
       syncNewMessages();
-    }, 4000);
+    }, 3000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      supabase.removeChannel(chatChannel);
+    };
   }, []);
 
   // Inject system messages dynamically from the database state!
@@ -278,7 +340,7 @@ export default function KarigarChat({ route, navigation }) {
     }
   };
 
-  // Fetch Chat Messages from Backend
+  // Fetch Chat Messages directly from Supabase (fast, real-time) with Vercel fallback
   const fetchMessages = async (customUserId = null) => {
     const activeUserId = customUserId || currentUserIdRef.current || (role === "buyer" ? MOCK_BUYER_UUID : MOCK_SELLER_UUID);
 
@@ -288,86 +350,88 @@ export default function KarigarChat({ route, navigation }) {
       updateMessages(existingHistory);
     }
 
+    const normBookingId = normalizeBookingIdForRealtime(bookingId);
+
     try {
       setLoading(true);
-      const response = await fetch(`${BASE_URL}/api/chat/messages/${bookingId}`, {
-        headers: { "Bypass-Tunnel-Reminder": "true" }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.messages && data.messages.length > 0) {
-          const formatted = data.messages.map(msg => {
-            const safeSenderId = msg.sender_id ? String(msg.sender_id) : "";
-            const isBuyer = safeSenderId.includes("buyer") || safeSenderId === MOCK_BUYER_UUID || (role === "buyer" && safeSenderId === activeUserId);
-            return {
-              id: msg.id || Math.random(),
-              senderId: safeSenderId,
-              senderRole: isBuyer ? "buyer" : "seller",
-              text: msg.message ? String(msg.message) : "",
-              time: formatTime(msg.timestamp),
-              system: false
-            };
-          });
+      // Query Supabase directly first (much faster than routing through Vercel serverless functions)
+      const { data: dbMessages, error: dbErr } = await supabase
+        .from("chats")
+        .select("*")
+        .eq("booking_id", normBookingId)
+        .order("timestamp", { ascending: true });
 
-          // Merge backend messages with our global preserved history (deduplicated by text/id)
-          const merged = [...(global.appChatHistory[chatKey] || [])];
-          const existingTexts = new Set(merged.map(m => (m && m.text ? String(m.text).trim().toLowerCase() : "")));
+      if (dbErr) throw dbErr;
 
-          for (const fm of formatted) {
-            const cleanText = fm.text ? String(fm.text).trim().toLowerCase() : "";
-            if (cleanText && !existingTexts.has(cleanText)) {
-              merged.push(fm);
-              existingTexts.add(cleanText);
-            }
+      if (dbMessages && dbMessages.length > 0) {
+        const formatted = dbMessages.map(msg => {
+          const safeSenderId = msg.sender_id ? String(msg.sender_id) : "";
+          const isBuyer = safeSenderId.includes("buyer") || safeSenderId === MOCK_BUYER_UUID || (role === "buyer" && safeSenderId === activeUserId);
+          return {
+            id: msg.id || Math.random(),
+            senderId: safeSenderId,
+            senderRole: isBuyer ? "buyer" : "seller",
+            text: msg.message ? String(msg.message) : "",
+            time: formatTime(msg.timestamp),
+            system: false
+          };
+        });
+
+        const merged = [...(global.appChatHistory[chatKey] || [])];
+        const existingTexts = new Set(merged.map(m => (m && m.text ? String(m.text).trim().toLowerCase() : "")));
+
+        for (const fm of formatted) {
+          const cleanText = fm.text ? String(fm.text).trim().toLowerCase() : "";
+          if (cleanText && !existingTexts.has(cleanText)) {
+            merged.push(fm);
+            existingTexts.add(cleanText);
           }
-
-          merged.sort((a, b) => String(a?.id || "").localeCompare(String(b?.id || "")));
-          updateMessages(merged);
-        } else {
-          throw new Error("No messages returned from Vercel, trying direct Supabase fallback");
         }
+
+        merged.sort((a, b) => String(a?.id || "").localeCompare(String(b?.id || "")));
+        updateMessages(merged);
       } else {
-        throw new Error("Vercel fetch failed, trying direct Supabase fallback");
+        throw new Error("No messages returned from direct Supabase query, trying Vercel fallback");
       }
     } catch (err) {
-      console.log("Error fetching from Vercel, directly querying Supabase chats table:", err.message);
+      console.log("Direct Supabase query failed or empty, trying Vercel fallback:", err.message);
       try {
-        const { data: dbMessages, error: dbErr } = await supabase
-          .from("chats")
-          .select("*")
-          .eq("booking_id", bookingId)
-          .order("timestamp", { ascending: true });
+        const response = await fetch(`${BASE_URL}/api/chat/messages/${bookingId}`, {
+          headers: { "Bypass-Tunnel-Reminder": "true" }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.messages && data.messages.length > 0) {
+            const formatted = data.messages.map(msg => {
+              const safeSenderId = msg.sender_id ? String(msg.sender_id) : "";
+              const isBuyer = safeSenderId.includes("buyer") || safeSenderId === MOCK_BUYER_UUID || (role === "buyer" && safeSenderId === activeUserId);
+              return {
+                id: msg.id || Math.random(),
+                senderId: safeSenderId,
+                senderRole: isBuyer ? "buyer" : "seller",
+                text: msg.message ? String(msg.message) : "",
+                time: formatTime(msg.timestamp),
+                system: false
+              };
+            });
 
-        if (!dbErr && dbMessages && dbMessages.length > 0) {
-          const formatted = dbMessages.map(msg => {
-            const safeSenderId = msg.sender_id ? String(msg.sender_id) : "";
-            const isBuyer = safeSenderId.includes("buyer") || safeSenderId === MOCK_BUYER_UUID || (role === "buyer" && safeSenderId === activeUserId);
-            return {
-              id: msg.id || Math.random(),
-              senderId: safeSenderId,
-              senderRole: isBuyer ? "buyer" : "seller",
-              text: msg.message ? String(msg.message) : "",
-              time: formatTime(msg.timestamp),
-              system: false
-            };
-          });
+            const merged = [...(global.appChatHistory[chatKey] || [])];
+            const existingTexts = new Set(merged.map(m => (m && m.text ? String(m.text).trim().toLowerCase() : "")));
 
-          const merged = [...(global.appChatHistory[chatKey] || [])];
-          const existingTexts = new Set(merged.map(m => (m && m.text ? String(m.text).trim().toLowerCase() : "")));
-
-          for (const fm of formatted) {
-            const cleanText = fm.text ? String(fm.text).trim().toLowerCase() : "";
-            if (cleanText && !existingTexts.has(cleanText)) {
-              merged.push(fm);
-              existingTexts.add(cleanText);
+            for (const fm of formatted) {
+              const cleanText = fm.text ? String(fm.text).trim().toLowerCase() : "";
+              if (cleanText && !existingTexts.has(cleanText)) {
+                merged.push(fm);
+                existingTexts.add(cleanText);
+              }
             }
-          }
 
-          merged.sort((a, b) => String(a?.id || "").localeCompare(String(b?.id || "")));
-          updateMessages(merged);
+            merged.sort((a, b) => String(a?.id || "").localeCompare(String(b?.id || "")));
+            updateMessages(merged);
+          }
         }
-      } catch (subErr) {
-        console.log("Supabase direct query error:", subErr.message);
+      } catch (vercelErr) {
+        console.log("Vercel fallback query error:", vercelErr.message);
       }
     } finally {
       setLoading(false);
@@ -380,92 +444,92 @@ export default function KarigarChat({ route, navigation }) {
     const activeUserId = currentUserIdRef.current || (role === "buyer" ? MOCK_BUYER_UUID : MOCK_SELLER_UUID);
     if (!activeUserId) return;
 
+    const normBookingId = normalizeBookingIdForRealtime(bookingId);
+
     try {
-      const response = await fetch(`${BASE_URL}/api/chat/messages/${bookingId}`, {
-        headers: { "Bypass-Tunnel-Reminder": "true" }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.messages && data.messages.length > 0) {
-          const formatted = data.messages.map(msg => {
-            const safeSenderId = msg.sender_id ? String(msg.sender_id) : "";
-            const isBuyer = safeSenderId.includes("buyer") || safeSenderId === MOCK_BUYER_UUID || (role === "buyer" && safeSenderId === activeUserId);
-            return {
-              id: msg.id || Math.random(),
-              senderId: safeSenderId,
-              senderRole: isBuyer ? "buyer" : "seller",
-              text: msg.message ? String(msg.message) : "",
-              time: formatTime(msg.timestamp),
-              system: false
-            };
-          });
+      const { data: dbMessages, error: dbErr } = await supabase
+        .from("chats")
+        .select("*")
+        .eq("booking_id", normBookingId)
+        .order("timestamp", { ascending: true });
 
-          const merged = [...(global.appChatHistory[chatKey] || [])];
-          const existingTexts = new Set(merged.map(m => (m && m.text ? String(m.text).trim().toLowerCase() : "")));
-          let added = false;
+      if (dbErr) throw dbErr;
 
-          for (const fm of formatted) {
-            const cleanText = fm.text ? String(fm.text).trim().toLowerCase() : "";
-            if (cleanText && !existingTexts.has(cleanText)) {
-              merged.push(fm);
-              existingTexts.add(cleanText);
-              added = true;
-            }
+      if (dbMessages && dbMessages.length > 0) {
+        const formatted = dbMessages.map(msg => {
+          const safeSenderId = msg.sender_id ? String(msg.sender_id) : "";
+          const isBuyer = safeSenderId.includes("buyer") || safeSenderId === MOCK_BUYER_UUID || (role === "buyer" && safeSenderId === activeUserId);
+          return {
+            id: msg.id || Math.random(),
+            senderId: safeSenderId,
+            senderRole: isBuyer ? "buyer" : "seller",
+            text: msg.message ? String(msg.message) : "",
+            time: formatTime(msg.timestamp),
+            system: false
+          };
+        });
+
+        const merged = [...(global.appChatHistory[chatKey] || [])];
+        const existingTexts = new Set(merged.map(m => (m && m.text ? String(m.text).trim().toLowerCase() : "")));
+        let added = false;
+
+        for (const fm of formatted) {
+          const cleanText = fm.text ? String(fm.text).trim().toLowerCase() : "";
+          if (cleanText && !existingTexts.has(cleanText)) {
+            merged.push(fm);
+            existingTexts.add(cleanText);
+            added = true;
           }
-
-          if (added) {
-            merged.sort((a, b) => String(a?.id || "").localeCompare(String(b?.id || "")));
-            updateMessages(merged);
-            setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
-          }
-        } else {
-          throw new Error("No messages returned from Vercel sync, trying direct Supabase fallback");
         }
-      } else {
-        throw new Error("Vercel sync failed, trying direct Supabase fallback");
+
+        if (added) {
+          merged.sort((a, b) => String(a?.id || "").localeCompare(String(b?.id || "")));
+          updateMessages(merged);
+          setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
+        }
       }
     } catch (err) {
       try {
-        const { data: dbMessages, error: dbErr } = await supabase
-          .from("chats")
-          .select("*")
-          .eq("booking_id", bookingId)
-          .order("timestamp", { ascending: true });
+        const response = await fetch(`${BASE_URL}/api/chat/messages/${bookingId}`, {
+          headers: { "Bypass-Tunnel-Reminder": "true" }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.messages && data.messages.length > 0) {
+            const formatted = data.messages.map(msg => {
+              const safeSenderId = msg.sender_id ? String(msg.sender_id) : "";
+              const isBuyer = safeSenderId.includes("buyer") || safeSenderId === MOCK_BUYER_UUID || (role === "buyer" && safeSenderId === activeUserId);
+              return {
+                id: msg.id || Math.random(),
+                senderId: safeSenderId,
+                senderRole: isBuyer ? "buyer" : "seller",
+                text: msg.message ? String(msg.message) : "",
+                time: formatTime(msg.timestamp),
+                system: false
+              };
+            });
 
-        if (!dbErr && dbMessages && dbMessages.length > 0) {
-          const formatted = dbMessages.map(msg => {
-            const safeSenderId = msg.sender_id ? String(msg.sender_id) : "";
-            const isBuyer = safeSenderId.includes("buyer") || safeSenderId === MOCK_BUYER_UUID || (role === "buyer" && safeSenderId === activeUserId);
-            return {
-              id: msg.id || Math.random(),
-              senderId: safeSenderId,
-              senderRole: isBuyer ? "buyer" : "seller",
-              text: msg.message ? String(msg.message) : "",
-              time: formatTime(msg.timestamp),
-              system: false
-            };
-          });
+            const merged = [...(global.appChatHistory[chatKey] || [])];
+            const existingTexts = new Set(merged.map(m => (m && m.text ? String(m.text).trim().toLowerCase() : "")));
+            let added = false;
 
-          const merged = [...(global.appChatHistory[chatKey] || [])];
-          const existingTexts = new Set(merged.map(m => (m && m.text ? String(m.text).trim().toLowerCase() : "")));
-          let added = false;
+            for (const fm of formatted) {
+              const cleanText = fm.text ? String(fm.text).trim().toLowerCase() : "";
+              if (cleanText && !existingTexts.has(cleanText)) {
+                merged.push(fm);
+                existingTexts.add(cleanText);
+                added = true;
+              }
+            }
 
-          for (const fm of formatted) {
-            const cleanText = fm.text ? String(fm.text).trim().toLowerCase() : "";
-            if (cleanText && !existingTexts.has(cleanText)) {
-              merged.push(fm);
-              existingTexts.add(cleanText);
-              added = true;
+            if (added) {
+              merged.sort((a, b) => String(a?.id || "").localeCompare(String(b?.id || "")));
+              updateMessages(merged);
+              setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
             }
           }
-
-          if (added) {
-            merged.sort((a, b) => String(a?.id || "").localeCompare(String(b?.id || "")));
-            updateMessages(merged);
-            setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
-          }
         }
-      } catch (subErr) {
+      } catch (vercelErr) {
         // Silent sync catch
       }
     }

@@ -4,13 +4,14 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   StatusBar,
   ScrollView,
   Dimensions,
   Image,
   ActivityIndicator,
+  Platform,
 } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   ArrowLeft,
   Heart,
@@ -69,6 +70,7 @@ const DUMMY_SERVICES = [
 export default function KarigarSellerProfile({ provider, onClose, onBook, onChat }) {
   const [liked, setLiked] = useState(false);
   const [activeTab, setActiveTab] = useState("about");
+  const insets = useSafeAreaInsets();
 
   // Fallback data if provider object is missing (e.g. standalone test mode)
   const defaultProvider = {
@@ -354,7 +356,11 @@ export default function KarigarSellerProfile({ provider, onClose, onBook, onChat
                   <ActivityIndicator size="small" color="#065F46" />
                 </View>
               ) : (
-                <View style={styles.slotsRow}>
+                <ScrollView 
+                  horizontal 
+                  showsHorizontalScrollIndicator={false} 
+                  contentContainerStyle={styles.slotsScrollContainer}
+                >
                   {dbSlots.map((slot, index) => {
                     const isSelected = selectedSlot === slot;
                     return (
@@ -365,13 +371,13 @@ export default function KarigarSellerProfile({ provider, onClose, onBook, onChat
                         onPress={() => setSelectedSlot(slot)}
                       >
                         <Calendar size={12} color={isSelected ? "white" : "#6B7280"} style={{ marginRight: 5 }} />
-                        <Text style={[styles.slotChipText, isSelected && styles.slotChipTextActive]}>
+                        <Text style={[styles.slotChipText, isSelected && styles.slotChipTextActive]} numberOfLines={1}>
                           {slot}
                         </Text>
                       </TouchableOpacity>
                     );
                   })}
-                </View>
+                </ScrollView>
               )}
 
               {/* Dynamic Price Quote breakdown receipt */}
@@ -459,10 +465,10 @@ export default function KarigarSellerProfile({ provider, onClose, onBook, onChat
           )}
         </View>
 
-        <View style={{ height: 130 }} />
+        <View style={{ height: 30 }} />
       </ScrollView>
 
-      <View style={styles.footerSticky}>
+      <View style={[styles.footerSticky, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <View style={styles.priceContainer}>
           <Text style={styles.priceLabel}>Estimated Dynamic Quote</Text>
           <Text style={styles.priceValue}>Rs. {totalQuote.toLocaleString()}</Text>
@@ -797,19 +803,20 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#4B5563",
   },
-  slotsRow: {
+  slotsScrollContainer: {
     flexDirection: "row",
     gap: 8,
-    justifyContent: "space-between",
+    paddingHorizontal: 2,
+    paddingVertical: 4,
   },
   slotChipButton: {
-    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "white",
     borderRadius: 10,
     paddingVertical: 8,
+    paddingHorizontal: 12,
     borderWidth: 1.5,
     borderColor: "#E5E7EB",
   },
@@ -993,11 +1000,6 @@ const styles = StyleSheet.create({
   },
   // Sticky Footer
   footerSticky: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    zIndex: 999,
     backgroundColor: "white",
     paddingHorizontal: 20,
     paddingTop: 14,

@@ -5,7 +5,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  SafeAreaView,
   ScrollView,
   ActivityIndicator,
   StatusBar,
@@ -13,7 +12,9 @@ import {
   TouchableWithoutFeedback,
   Keyboard,
   Image,
+  KeyboardAvoidingView,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Path, Rect, Circle, G } from "react-native-svg";
 import {
   useFonts,
@@ -151,84 +152,91 @@ export default function AuthScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor="#f4f7f5" />
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
+      >
         <ScrollView
-          contentContainerStyle={styles.scroll}
+          contentContainerStyle={{ flexGrow: 1 }}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.brand}>
-            <View style={styles.logoContainer}>
-              <Image
-                source={require("../assets/logo.png")}
-                style={styles.logoImage}
-                resizeMode="contain"
-              />
-            </View>
-            <Text style={styles.brandTagline}>Dignity in Work, Reliability in Service</Text>
-          </View>
-
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Login</Text>
-            <Text style={styles.cardSubtitle}>Enter your mobile number to access your account</Text>
-            <Text style={styles.fieldLabel}>Mobile Number</Text>
-            <View style={[styles.phoneWrapper, focused && styles.phoneWrapperFocused]}>
-              <View style={styles.prefix}>
-                <View style={styles.flag}>
-                  <IconFlagPK />
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+            <View style={styles.scroll}>
+              <View style={styles.brand}>
+                <View style={styles.logoContainer}>
+                  <Image
+                    source={require("../assets/logo.png")}
+                    style={styles.logoImage}
+                    resizeMode="contain"
+                  />
                 </View>
-                <Text style={styles.prefixCode}>+92</Text>
-                <View style={styles.divider} />
+                <Text style={styles.brandTagline}>Dignity in Work, Reliability in Service</Text>
               </View>
-              <TextInput
-                ref={phoneInputRef}
-                style={styles.phoneInput}
-                value={formatDisplay(phone)}
-                onChangeText={handleChangePhone}
-                placeholder="300 1234567"
-                placeholderTextColor="#a0b8aa"
-                keyboardType="phone-pad"
-                maxLength={12}
-                onFocus={() => setFocused(true)}
-                onBlur={() => setFocused(false)}
-              />
-            </View>
 
-            {error ? <Text style={styles.errorMsg}>{error}</Text> : null}
-
-            <TouchableOpacity
-              style={[styles.btnOTP, loading && styles.btnLoading]}
-              onPress={handleContinue}
-              activeOpacity={0.85}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color="#fff" size="small" />
-              ) : (
-                <View style={styles.btnInner}>
-                  <Text style={styles.btnText}>Login</Text>
-                  <IconArrowRight />
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>Login</Text>
+                <Text style={styles.cardSubtitle}>Enter your mobile number to access your account</Text>
+                <Text style={styles.fieldLabel}>Mobile Number</Text>
+                <View style={[styles.phoneWrapper, focused && styles.phoneWrapperFocused]}>
+                  <View style={styles.prefix}>
+                    <View style={styles.flag}>
+                      <IconFlagPK />
+                    </View>
+                    <Text style={styles.prefixCode}>+92</Text>
+                    <View style={styles.divider} />
+                  </View>
+                  <TextInput
+                    ref={phoneInputRef}
+                    style={styles.phoneInput}
+                    value={formatDisplay(phone)}
+                    onChangeText={handleChangePhone}
+                    placeholder="300 1234567"
+                    placeholderTextColor="#a0b8aa"
+                    keyboardType="phone-pad"
+                    maxLength={12}
+                    onFocus={() => setFocused(true)}
+                    onBlur={() => setFocused(false)}
+                  />
                 </View>
-              )}
-            </TouchableOpacity>
 
-            <View style={styles.signupRow}>
-              <Text style={styles.signupText}>New to Karigar? </Text>
-              <TouchableOpacity onPress={() => navigation.navigate("Signup")}>
-                <Text style={styles.signupLink}>Sign up</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+                {error ? <Text style={styles.errorMsg}>{error}</Text> : null}
 
-          <View style={styles.footer}>
-            <View style={styles.secureRow}>
-              <IconShield />
-              <Text style={styles.secureText}>Secure and Encrypted</Text>
+                <TouchableOpacity
+                  style={[styles.btnOTP, loading && styles.btnLoading]}
+                  onPress={handleContinue}
+                  activeOpacity={0.85}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <View style={styles.btnInner}>
+                      <Text style={styles.btnText}>Login</Text>
+                      <IconArrowRight />
+                    </View>
+                  )}
+                </TouchableOpacity>
+
+                <View style={styles.signupRow}>
+                  <Text style={styles.signupText}>New to Karigar? </Text>
+                  <TouchableOpacity onPress={() => navigation.navigate("Signup")}>
+                    <Text style={styles.signupLink}>Sign up</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <View style={styles.footer}>
+                <View style={styles.secureRow}>
+                  <IconShield />
+                  <Text style={styles.secureText}>Secure and Encrypted</Text>
+                </View>
+              </View>
             </View>
-          </View>
+          </TouchableWithoutFeedback>
         </ScrollView>
-      </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
