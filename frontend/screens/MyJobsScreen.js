@@ -93,6 +93,8 @@ function MyJobsScreen({ navigation }) {
         future: []
       };
 
+      const upcomingJobs = [];
+
       bookings.forEach(b => {
         const buyer = profileMap[b.buyer_id] || { name: "Customer", profile_image_url: null };
         const job = {
@@ -104,23 +106,17 @@ function MyJobsScreen({ navigation }) {
         if (job.status === "completed") {
           categorized.past.push(job);
         } else if (job.status === "confirmed" || job.status === "accepted") {
-          let timeDiffHours = 0;
-          try {
-            const jobTime = new Date(job.requested_time);
-            if (!isNaN(jobTime.getTime())) {
-              timeDiffHours = (jobTime.getTime() - now.getTime()) / (1000 * 60 * 60);
-            }
-          } catch(e) {}
-          
-          if (timeDiffHours <= 1 && timeDiffHours >= -12) {
-            categorized.current.push(job);
-          } else if (timeDiffHours > 1) {
-            categorized.future.push(job);
-          } else {
-            categorized.current.push(job);
-          }
+          upcomingJobs.push(job);
         }
       });
+
+      // upcomingJobs is already sorted by requested_time ascending from the DB query
+      if (upcomingJobs.length > 0) {
+        categorized.current.push(upcomingJobs[0]); // The closest one in time
+        for (let i = 1; i < upcomingJobs.length; i++) {
+          categorized.future.push(upcomingJobs[i]);
+        }
+      }
 
       // Sort past jobs newest first safely
       categorized.past.sort((a, b) => {
@@ -140,6 +136,23 @@ function MyJobsScreen({ navigation }) {
     } catch (err) {
       console.log("Error fetching jobs:", err);
     } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMarkAsDone = async (jobId) => {
+    try {
+      setLoading(true);
+      const { error } = await supabase
+        .from("bookings")
+        .update({ status: "completed" })
+        .eq("id", jobId);
+        
+      if (error) throw error;
+      
+      await fetchJobs();
+    } catch (err) {
+      console.log("Error marking as done:", err);
       setLoading(false);
     }
   };
@@ -194,7 +207,16 @@ function MyJobsScreen({ navigation }) {
     }
 
     return (
-      <View key={job.id || Math.random().toString()} style={styles.jobCard}><View style={styles.cardHeader}><Image source={{ uri: job.customerAvatar || "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200" }} style={styles.avatar} /><View style={styles.customerInfo}><Text style={styles.customerName}>{String(job.customerName || "Customer")}</Text><Text style={styles.serviceText}>{String(job.service_type || "Service")}</Text></View><View style={[styles.statusBadge, { backgroundColor: statusBg }]}><StatusIcon size={12} color={statusColor} /><Text style={[styles.statusBadgeText, { color: statusColor }]}>{statusText}</Text></View></View><View style={styles.divider} /><View style={styles.detailsRow}><View style={styles.detailItem}><Clock size={14} color="#6B7280" /><Text style={styles.detailText}>{formatJobTime(job.requested_time)}</Text></View></View><View style={[styles.detailsRow, { marginTop: 8 }]}><View style={styles.detailItem}><MapPin size={14} color="#6B7280" /><Text style={styles.detailText} numberOfLines={2}>{String(job.location || "Location not set")}</Text></View></View></View>
+      <View key={job.id || Math.random().toString()} style={styles.jobCard}><View style={styles.cardHeader}><Image source={{ uri: job.customerAvatar || "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200" }} style={styles.avatar} /><View style={styles.customerInfo}><Text style={styles.customerName}>{String(job.customerName || "Customer")}</Text><Text style={styles.serviceText}>{String(job.service_type || "Service")}</Text></View><View style={[styles.statusBadge, { backgroundColor: statusBg }]}><StatusIcon size={12} color={statusColor} /><Text style={[styles.statusBadgeText, { color: statusColor }]}>{statusText}</Text></View></View><View style={styles.divider} /><View style={styles.detailsRow}><View style={styles.detailItem}><Clock size={14} color="#6B7280" /><Text style={styles.detailText}>{formatJobTime(job.requested_time)}</Text></View></View><View style={[styles.detailsRow, { marginTop: 8 }]}><View style={styles.detailItem}><MapPin size={14} color="#6B7280" /><Text style={styles.detailText} numberOfLines={2}>{String(job.location || "Location not set")}</Text></View></View>
+        {type === "current" && (
+          <TouchableOpacity 
+            style={styles.markDoneBtn}
+            onPress={() => handleMarkAsDone(job.id)}
+          >
+            <Text style={styles.markDoneBtnText}>Mark as Done</Text>
+          </TouchableOpacity>
+        )}
+      </View>
     );
   };
 
@@ -399,6 +421,18 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#4B5563",
     flex: 1,
+  },
+  markDoneBtn: {
+    marginTop: 16,
+    backgroundColor: "#065F46",
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  markDoneBtnText: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 14,
+    color: "white",
   },
 });
 
