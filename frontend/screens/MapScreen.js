@@ -159,6 +159,7 @@ export default function MapScreen({ navigation }) {
   const [activeTab, setActiveTab] = useState("home");
   const [jobDescription, setJobDescription] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [currentRequestId, setCurrentRequestId] = useState(null);
 
   // Dynamic Provider Matching States
   const [matchedProviders, setMatchedProviders] = useState([]);
@@ -548,19 +549,31 @@ export default function MapScreen({ navigation }) {
         return;
       }
 
-      // Add a pending booking in Supabase with parsed entities
-      const { error } = await supabase.from("bookings").insert([
-        {
-          buyer_id: user.id,
+      // Add or update pending booking in Supabase with parsed entities
+      let bookingError = null;
+      if (currentRequestId) {
+        const { error } = await supabase.from("bookings").update({
           service_type: service.value,
           location: parsedLocation.value,
           requested_time: time.resolvedTimestamp || new Date().toISOString(),
-          price: 1500, // Est base rate
-          status: "pending",
-        },
-      ]);
+        }).eq("id", currentRequestId);
+        bookingError = error;
+      } else {
+        const { data: newBooking, error } = await supabase.from("bookings").insert([
+          {
+            buyer_id: user.id,
+            service_type: service.value,
+            location: parsedLocation.value,
+            requested_time: time.resolvedTimestamp || new Date().toISOString(),
+            price: 1500, // Est base rate
+            status: "pending",
+          },
+        ]).select().single();
+        bookingError = error;
+        if (newBooking) setCurrentRequestId(newBooking.id);
+      }
 
-      if (error) throw error;
+      if (bookingError) throw bookingError;
 
       // Start the scanning animation
       setIsScanning(true);
@@ -656,6 +669,13 @@ export default function MapScreen({ navigation }) {
     setShowMatches(false);
     setMatchedProviders([]);
     setJobDescription("");
+    setCurrentRequestId(null);
+  };
+
+  const handleEditRequest = () => {
+    setShowMatches(false);
+    // Note: We deliberately do NOT clear jobDescription or currentRequestId here,
+    // so the user can modify their prompt and update the same booking.
   };
 
   const handleBookProvider = (provider) => {
@@ -1137,12 +1157,20 @@ export default function MapScreen({ navigation }) {
                       <Text style={styles.tapToBookText}>
                         📍 Tap any card on the map to book them instantly!
                       </Text>
-                      <TouchableOpacity 
-                        style={styles.closeBannerBtn}
-                        onPress={handleCloseMatches}
-                      >
-                        <Text style={styles.closeBannerText}>✕</Text>
-                      </TouchableOpacity>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <TouchableOpacity 
+                          style={styles.editRequestBtn}
+                          onPress={handleEditRequest}
+                        >
+                          <Text style={styles.editRequestText}>Edit Request</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                          style={styles.closeBannerBtn}
+                          onPress={handleCloseMatches}
+                        >
+                          <Text style={styles.closeBannerText}>✕</Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
                   </View>
                 )}
