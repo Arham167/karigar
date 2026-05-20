@@ -24,7 +24,8 @@ import {
   MapPin, 
   ShieldCheck, 
   ArrowRight,
-  LogOut
+  LogOut,
+  Briefcase
 } from "lucide-react-native";
 import { supabase } from "../utils/supabase";
 import { useAuthStore } from "../store/authStore";
@@ -441,6 +442,24 @@ export default function SellerDashboard({ navigation }) {
           </View>
         </View>
 
+        {/* ── 3.5 My Jobs Quick Link ── */}
+        <TouchableOpacity 
+          style={styles.myJobsBanner}
+          activeOpacity={0.85}
+          onPress={() => navigation.navigate("MyJobs")}
+        >
+          <View style={styles.myJobsBannerContent}>
+            <View style={[styles.iconWrapper, { backgroundColor: "#D1FAE5", marginBottom: 0, marginRight: 12 }]}>
+              <Briefcase size={20} color="#059669" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.myJobsTitle}>My Jobs Manager</Text>
+              <Text style={styles.myJobsSub}>View your past, active, and future jobs</Text>
+            </View>
+            <ArrowRight size={20} color="#059669" />
+          </View>
+        </TouchableOpacity>
+
         {/* ── 4. Active Negotiations / Chat Requests ── */}
         <View style={styles.negotiationsHeaderRow}>
           <Text style={styles.sectionTitle}>Active Negotiations & Chats</Text>
@@ -663,6 +682,35 @@ const styles = StyleSheet.create({
   metricSub: {
     fontFamily: "DMSans_400Regular",
     fontSize: 10,
+    color: "#6B7280",
+    marginTop: 2,
+  },
+  // My Jobs Banner
+  myJobsBanner: {
+    backgroundColor: "white",
+    borderRadius: 20,
+    padding: 16,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+    shadowColor: "#059669",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  myJobsBannerContent: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  myJobsTitle: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 15,
+    color: "#065F46",
+  },
+  myJobsSub: {
+    fontFamily: "DMSans_400Regular",
+    fontSize: 11,
     color: "#6B7280",
     marginTop: 2,
   },
