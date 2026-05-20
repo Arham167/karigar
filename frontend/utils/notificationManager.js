@@ -71,15 +71,40 @@ export async function initNotifications() {
  */
 export async function showBookingConfirmedNotification(booking) {
   try {
-    const requestedTime = new Date(booking.requested_time || booking.requestedTime || new Date());
-    const timeStr = requestedTime.toLocaleString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
+    let safeTimeVal = booking.requested_time || booking.requestedTime;
+    if (!safeTimeVal) {
+      safeTimeVal = new Date().toISOString();
+    }
+    
+    // Ensure UTC format for parsing
+    if (typeof safeTimeVal === 'string' && !safeTimeVal.endsWith('Z') && !safeTimeVal.includes('+') && safeTimeVal.split('T')[1]?.length <= 12) {
+      safeTimeVal += 'Z';
+    }
+
+    let timeStr = "";
+    const d = new Date(safeTimeVal);
+    if (!isNaN(d.getTime())) {
+      const utcMs = d.getTime();
+      const pkMs = utcMs + (5 * 60 * 60 * 1000); // UTC+5
+      const pkDate = new Date(pkMs);
+      
+      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      
+      const dayName = days[pkDate.getUTCDay()];
+      const monthName = months[pkDate.getUTCMonth()];
+      const dateNum = pkDate.getUTCDate();
+      
+      let h = pkDate.getUTCHours();
+      const m = pkDate.getUTCMinutes().toString().padStart(2, '0');
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      h = h % 12 || 12;
+      
+      timeStr = `${dayName}, ${monthName} ${dateNum}, ${h}:${m} ${ampm}`;
+    } else {
+      timeStr = "the requested time";
+    }
+
     const service = booking.service_type || booking.serviceType || "Service Request";
     const loc = booking.location || "Specified Location";
     const price = booking.price || "negotiated price";
