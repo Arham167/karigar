@@ -1012,16 +1012,6 @@ export default function KarigarChat({ route, navigation }) {
               <Lock size={12} color="#A7F3D0" />
               <Text style={styles.encryptedText}>Secure</Text>
             </View>
-            {(bookingStatus === "confirmed" || bookingStatus === "accepted" || bookingStatus === "completed" || bothAgreed) && role === "buyer" && (
-              <TouchableOpacity onPress={() => setShowDisputeModal(true)} style={{marginTop: 6, alignItems: 'center'}}>
-                <Text style={{color: '#FCD34D', fontSize: 10, fontFamily: 'DMSans_700Bold'}}>File Dispute</Text>
-              </TouchableOpacity>
-            )}
-            {(bookingStatus === "confirmed" || bookingStatus === "accepted" || bothAgreed) && role === "seller" && (
-              <TouchableOpacity onPress={handleCancelBooking} style={{marginTop: 6, alignItems: 'center'}}>
-                <Text style={{color: '#FCA5A5', fontSize: 10, fontFamily: 'DMSans_700Bold'}}>Cancel Booking</Text>
-              </TouchableOpacity>
-            )}
           </View>
         </View>
       </View>
@@ -1182,6 +1172,32 @@ export default function KarigarChat({ route, navigation }) {
             )}
           </View>
         )}
+
+        {/* --- Action Buttons (Cancel / Dispute) --- */}
+        {(bookingStatus === "confirmed" || bookingStatus === "accepted" || bothAgreed) && (
+          <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 12, marginBottom: 4 }}>
+            {role === "buyer" && (
+              <TouchableOpacity 
+                style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF2F2', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 25, borderWidth: 1, borderColor: '#FECACA' }}
+                onPress={() => setShowDisputeModal(true)}
+                activeOpacity={0.8}
+              >
+                <AlertTriangle size={18} color="#EF4444" style={{ marginRight: 8 }} />
+                <Text style={{ color: '#EF4444', fontFamily: 'DMSans_700Bold', fontSize: 15 }}>File Dispute</Text>
+              </TouchableOpacity>
+            )}
+            {role === "seller" && (
+              <TouchableOpacity 
+                style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEF2F2', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 25, borderWidth: 1, borderColor: '#FECACA' }}
+                onPress={handleCancelBooking}
+                activeOpacity={0.8}
+              >
+                <AlertCircle size={18} color="#EF4444" style={{ marginRight: 8 }} />
+                <Text style={{ color: '#EF4444', fontFamily: 'DMSans_700Bold', fontSize: 15 }}>Cancel Booking</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
       </View>
 
       {/* ── 5. Message Input Bar ── */}
@@ -1264,8 +1280,11 @@ export default function KarigarChat({ route, navigation }) {
       </Modal>
 
       {/* ── 7. Dispute Modal ── */}
-      <Modal visible={showDisputeModal} transparent={true} animationType="slide">
-        <View style={styles.modalOverlay}>
+      <Modal visible={showDisputeModal} transparent={true} animationType="fade">
+        <KeyboardAvoidingView 
+          style={styles.modalOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
           <View style={styles.modalContent}>
             <View style={[styles.successIconWrapper, {backgroundColor: '#FEF2F2'}]}>
               <AlertTriangle size={48} color="#EF4444" />
@@ -1302,7 +1321,7 @@ export default function KarigarChat({ route, navigation }) {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
