@@ -16,8 +16,8 @@ import {
   MapPin, 
   Clock, 
   CheckCircle2, 
-  CalendarClock,
-  Zap,
+  Calendar,
+  AlertCircle,
   Briefcase
 } from "lucide-react-native";
 import { supabase } from "../utils/supabase";
@@ -159,12 +159,12 @@ export default function MyJobsScreen({ navigation }) {
     if (type === "current") {
       statusColor = "#D97706";
       statusBg = "#FFFBEB";
-      StatusIcon = Zap;
+      StatusIcon = AlertCircle;
       statusText = "Active Now";
     } else if (type === "future") {
       statusColor = "#2563EB";
       statusBg = "#EFF6FF";
-      StatusIcon = CalendarClock;
+      StatusIcon = Calendar;
       statusText = "Upcoming";
     }
 

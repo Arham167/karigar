@@ -148,7 +148,7 @@ export default function KarigarChat({ route, navigation }) {
   const chatChannelRef = useRef(null);
   
   // Track previous booking status to detect confirmation
-  const prevBookingStatusRef = useRef("pending");
+  const prevBookingStatusRef = useRef(null);
 
   // Fetch Current User on Mount
   useEffect(() => {
