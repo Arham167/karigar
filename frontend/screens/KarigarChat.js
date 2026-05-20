@@ -950,6 +950,34 @@ export default function KarigarChat({ route, navigation }) {
     }
   };
 
+  const handleCancelBooking = () => {
+    Alert.alert(
+      "Cancel Booking",
+      "Are you sure you want to cancel this booking? This will notify the customer and may affect your rating.",
+      [
+        { text: "No, Keep it", style: "cancel" },
+        { text: "Yes, Cancel", style: "destructive", onPress: async () => {
+          try {
+            const response = await fetch(`${BASE_URL}/api/bookings/cancel`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "Bypass-Tunnel-Reminder": "true" },
+              body: JSON.stringify({ bookingId: bookingId, canceledBy: "seller" })
+            });
+            const data = await response.json();
+            if (data.success) {
+              setBookingStatus("cancelled");
+              Alert.alert("Cancelled", "The booking has been cancelled.");
+            } else {
+              Alert.alert("Error", data.error || "Failed to cancel.");
+            }
+          } catch (err) {
+            Alert.alert("Error", "Network error while cancelling.");
+          }
+        }}
+      ]
+    );
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" translucent={true} backgroundColor="transparent" />
@@ -987,6 +1015,11 @@ export default function KarigarChat({ route, navigation }) {
             {(bookingStatus === "confirmed" || bookingStatus === "accepted" || bookingStatus === "completed" || bothAgreed) && role === "buyer" && (
               <TouchableOpacity onPress={() => setShowDisputeModal(true)} style={{marginTop: 6, alignItems: 'center'}}>
                 <Text style={{color: '#FCD34D', fontSize: 10, fontFamily: 'DMSans_700Bold'}}>File Dispute</Text>
+              </TouchableOpacity>
+            )}
+            {(bookingStatus === "confirmed" || bookingStatus === "accepted" || bothAgreed) && role === "seller" && (
+              <TouchableOpacity onPress={handleCancelBooking} style={{marginTop: 6, alignItems: 'center'}}>
+                <Text style={{color: '#FCA5A5', fontSize: 10, fontFamily: 'DMSans_700Bold'}}>Cancel Booking</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -1131,7 +1164,12 @@ export default function KarigarChat({ route, navigation }) {
           </TouchableOpacity>
         ) : (
           <View style={[styles.sellerStatusCard, bothAgreed && styles.sellerStatusCardUnlocked]}>
-            {bothAgreed ? (
+            {(bookingStatus === "confirmed" || bookingStatus === "accepted") ? (
+              <View style={styles.sellerStatusRow}>
+                <CheckCircle2 size={18} color="#059669" style={{ marginRight: 8 }} />
+                <Text style={styles.sellerStatusTextLocked}>Booking Confirmed! 🎉 Client has booked you.</Text>
+              </View>
+            ) : bothAgreed ? (
               <View style={styles.sellerStatusRow}>
                 <CheckCircle2 size={18} color="#059669" style={{ marginRight: 8 }} />
                 <Text style={styles.sellerStatusTextLocked}>Price Locked! Waiting for Buyer to finalize payment.</Text>

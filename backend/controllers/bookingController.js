@@ -138,7 +138,8 @@ exports.confirmBooking = async (req, res) => {
             serviceType: booking.service_type || "Service Request",
             location: booking.location || "Karachi",
             sellerId: booking.seller_id,
-            sellerBusinessName: sellerBusinessName
+            sellerBusinessName: sellerBusinessName,
+            price: booking.price
           });
           console.log(`[Booking Controller - SheetsSync] Google Sheets sync completed successfully!`);
         } catch (syncErr) {

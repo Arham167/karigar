@@ -71,7 +71,7 @@ export default function SellerDashboard({ navigation }) {
         // Fetch seller's bookings
         const { data: userBookings } = await supabase
           .from("bookings")
-          .select("id, service_type, seller_id, buyer_id, price, status, requested_time, confirmed_time")
+          .select("id, service_type, seller_id, buyer_id, price, status, requested_time, confirmed_time, location")
           .eq("seller_id", activeSellerId);
 
         if (!userBookings || userBookings.length === 0) return;

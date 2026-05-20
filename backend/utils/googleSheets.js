@@ -183,7 +183,8 @@ async function appendBookingToSheet(spreadsheetId, booking) {
         booking.location || 'Karachi',
         'Booked',
         booking.sellerId || '',
-        booking.sellerBusinessName || ''
+        booking.sellerBusinessName || '',
+        booking.price || ''
       ]
     ];
     
