@@ -314,41 +314,39 @@ export default function KarigarSellerProfile({ provider, userRequestedTime, user
 
 
         {/* ── Segmented Custom Tabs ── */}
-        <View style={styles.tabsWrapper}>
-          <View style={styles.tabsContainer}>
-            <TouchableOpacity
-              style={[styles.tabButton, activeTab === "about" && styles.tabButtonActive]}
-              onPress={() => setActiveTab("about")}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.tabButtonText, activeTab === "about" && styles.tabButtonTextActive]}>
-                About
-              </Text>
-              {activeTab === "about" && <View style={styles.activeTabIndicator} />}
-            </TouchableOpacity>
+        <View style={styles.tabsContainer}>
+          <TouchableOpacity
+            style={[styles.tabButton, activeTab === "about" && styles.tabButtonActive]}
+            onPress={() => setActiveTab("about")}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.tabButtonText, activeTab === "about" && styles.tabButtonTextActive]}>
+              About
+            </Text>
+            {activeTab === "about" && <View style={styles.activeTabIndicator} />}
+          </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.tabButton, activeTab === "services" && styles.tabButtonActive]}
-              onPress={() => setActiveTab("services")}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.tabButtonText, activeTab === "services" && styles.tabButtonTextActive]}>
-                Services
-              </Text>
-              {activeTab === "services" && <View style={styles.activeTabIndicator} />}
-            </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tabButton, activeTab === "services" && styles.tabButtonActive]}
+            onPress={() => setActiveTab("services")}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.tabButtonText, activeTab === "services" && styles.tabButtonTextActive]}>
+              Services
+            </Text>
+            {activeTab === "services" && <View style={styles.activeTabIndicator} />}
+          </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.tabButton, activeTab === "reviews" && styles.tabButtonActive]}
-              onPress={() => setActiveTab("reviews")}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.tabButtonText, activeTab === "reviews" && styles.tabButtonTextActive]}>
-                Reviews ({DUMMY_REVIEWS.length})
-              </Text>
-              {activeTab === "reviews" && <View style={styles.activeTabIndicator} />}
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            style={[styles.tabButton, activeTab === "reviews" && styles.tabButtonActive]}
+            onPress={() => setActiveTab("reviews")}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.tabButtonText, activeTab === "reviews" && styles.tabButtonTextActive]}>
+              Reviews ({DUMMY_REVIEWS.length})
+            </Text>
+            {activeTab === "reviews" && <View style={styles.activeTabIndicator} />}
+          </TouchableOpacity>
         </View>
 
         {/* ── Tab Content Views ── */}
@@ -541,11 +539,15 @@ export default function KarigarSellerProfile({ provider, userRequestedTime, user
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
     backgroundColor: "#F7F9F8",
   },
   scrollContent: {
-    paddingBottom: 110,
+    paddingBottom: 30,
   },
   // Hero Section
   heroContainer: {
@@ -735,14 +737,11 @@ const styles = StyleSheet.create({
     color: "#065F46",
   },
   // Tab Buttons Layout
-  tabsWrapper: {
-    backgroundColor: "#F7F9F8",
-    paddingTop: 16,
-    zIndex: 10,
-  },
   tabsContainer: {
     flexDirection: "row",
-    marginHorizontal: 20,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 8,
     borderBottomWidth: 1,
     borderBottomColor: "#E5E7EB",
     backgroundColor: "#F7F9F8",
@@ -1060,10 +1059,6 @@ const styles = StyleSheet.create({
   },
   // Sticky Footer
   footerSticky: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
     backgroundColor: "white",
     paddingHorizontal: 20,
     paddingTop: 14,
