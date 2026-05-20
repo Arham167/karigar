@@ -379,16 +379,23 @@ export default function MapScreen({ navigation }) {
         return;
       }
 
-      let currentLoc = await Location.getCurrentPositionAsync({});
-      setLocation(currentLoc);
-      
-      const newRegion = {
-        latitude: currentLoc.coords.latitude,
-        longitude: currentLoc.coords.longitude,
-        latitudeDelta: 0.015,
-        longitudeDelta: 0.015,
-      };
-      setRegion(newRegion);
+      // Prevent hanging on refresh by trying last known position first
+      let currentLoc = await Location.getLastKnownPositionAsync();
+      if (!currentLoc) {
+        // Fallback to current position with balanced accuracy to avoid GPS timeout hangs
+        currentLoc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      }
+
+      if (currentLoc) {
+        setLocation(currentLoc);
+        const newRegion = {
+          latitude: currentLoc.coords.latitude,
+          longitude: currentLoc.coords.longitude,
+          latitudeDelta: 0.015,
+          longitudeDelta: 0.015,
+        };
+        setRegion(newRegion);
+      }
     } catch (error) {
       console.log("Error getting current location:", error);
     } finally {
@@ -398,7 +405,7 @@ export default function MapScreen({ navigation }) {
 
   const centerOnUserLocation = async () => {
     try {
-      let currentLoc = await Location.getCurrentPositionAsync({});
+      let currentLoc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       setLocation(currentLoc);
       
       const newRegion = {
