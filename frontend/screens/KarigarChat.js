@@ -950,32 +950,33 @@ export default function KarigarChat({ route, navigation }) {
     }
   };
 
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
+
+  const confirmCancelBooking = async () => {
+    setIsCancelling(true);
+    try {
+      const response = await fetch(`${BASE_URL}/api/bookings/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Bypass-Tunnel-Reminder": "true" },
+        body: JSON.stringify({ bookingId: bookingId, canceledBy: "seller" })
+      });
+      const data = await response.json();
+      if (data.success) {
+        setBookingStatus("cancelled");
+        setShowCancelModal(false);
+      } else {
+        Alert.alert("Error", data.error || "Failed to cancel.");
+      }
+    } catch (err) {
+      Alert.alert("Error", "Network error while cancelling.");
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
   const handleCancelBooking = () => {
-    Alert.alert(
-      "Cancel Booking",
-      "Are you sure you want to cancel this booking? This will notify the customer and may affect your rating.",
-      [
-        { text: "No, Keep it", style: "cancel" },
-        { text: "Yes, Cancel", style: "destructive", onPress: async () => {
-          try {
-            const response = await fetch(`${BASE_URL}/api/bookings/cancel`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json", "Bypass-Tunnel-Reminder": "true" },
-              body: JSON.stringify({ bookingId: bookingId, canceledBy: "seller" })
-            });
-            const data = await response.json();
-            if (data.success) {
-              setBookingStatus("cancelled");
-              Alert.alert("Cancelled", "The booking has been cancelled.");
-            } else {
-              Alert.alert("Error", data.error || "Failed to cancel.");
-            }
-          } catch (err) {
-            Alert.alert("Error", "Network error while cancelling.");
-          }
-        }}
-      ]
-    );
+    setShowCancelModal(true);
   };
 
   return (
@@ -1322,6 +1323,32 @@ export default function KarigarChat({ route, navigation }) {
             </View>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ── 8. Cancel Confirmation Modal ── */}
+      <Modal visible={showCancelModal} transparent={true} animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={[styles.successIconWrapper, {backgroundColor: '#FEF2F2'}]}>
+              <AlertCircle size={48} color="#EF4444" />
+            </View>
+            <Text style={styles.modalTitle}>Cancel Booking?</Text>
+            <Text style={styles.modalSubtitle}>Are you sure you want to cancel this booking? This action cannot be undone and your rating may be negatively affected.</Text>
+
+            <View style={{flexDirection: 'row', gap: 12, width: '100%', marginTop: 20}}>
+              <TouchableOpacity style={[styles.successBtn, {flex: 1, backgroundColor: '#F3F4F6'}]} onPress={() => setShowCancelModal(false)}>
+                <Text style={[styles.successBtnText, {color: '#4B5563'}]}>No, Keep It</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.successBtn, {flex: 1, backgroundColor: '#EF4444'}]} onPress={confirmCancelBooking} disabled={isCancelling}>
+                {isCancelling ? (
+                  <ActivityIndicator color="white" />
+                ) : (
+                  <Text style={styles.successBtnText}>Yes, Cancel</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
       </Modal>
     </View>
   );

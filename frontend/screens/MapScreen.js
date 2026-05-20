@@ -310,6 +310,77 @@ export default function MapScreen({ navigation }) {
     }
   }, [activeTab]);
 
+  // Realtime Listener for Booking Cancellations (Buyer Side)
+  useEffect(() => {
+    let subscription = null;
+
+    const setupRealtimeListener = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        subscription = supabase
+          .channel('public:bookings')
+          .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bookings', filter: `buyer_id=eq.${user.id}` }, async (payload) => {
+            const newBooking = payload.new;
+            const oldBooking = payload.old;
+
+            // Detect if a booking was just cancelled remotely (by the seller)
+            if (oldBooking.status !== 'cancelled' && newBooking.status === 'cancelled') {
+              console.log("[MapScreen] Booking cancelled remotely! Fetching alternatives...");
+              try {
+                // Fetch alternatives from our match API using the cancelled booking's details
+                const matchResponse = await fetch(`${BASE_URL}/api/providers/match`, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "Bypass-Tunnel-Reminder": "true",
+                  },
+                  body: JSON.stringify({
+                    service: newBooking.service_type,
+                    location: newBooking.location || "Karachi",
+                    resolvedTimestamp: newBooking.requested_time || new Date().toISOString()
+                  }),
+                });
+                
+                const matchResult = await matchResponse.json();
+                const alternatives = matchResult.success ? (matchResult.providers || []) : [];
+
+                showCustomAlert(
+                  "Booking Cancelled 😔",
+                  "We're incredibly sorry for the bad experience. The Karigar has cancelled the booking. We've automatically penalized their profile. Here are some excellent alternative providers you can book right now.",
+                  [
+                    { text: "View Alternatives", onPress: () => {
+                        setMatchedService(newBooking.service_type);
+                        setMatchedLocation(newBooking.location || "Karachi");
+                        setMatchedTimestamp(newBooking.requested_time);
+                        setMatchedProviders(alternatives);
+                        setShowMatches(true);
+                        setActiveTab("home");
+                    }}
+                  ],
+                  "warning"
+                );
+              } catch(err) {
+                console.log("[MapScreen] Error fetching alternatives for cancelled booking:", err);
+              }
+            }
+          })
+          .subscribe();
+      } catch (err) {
+        console.log("Error setting up realtime listener:", err);
+      }
+    };
+
+    setupRealtimeListener();
+
+    return () => {
+      if (subscription) {
+        supabase.removeChannel(subscription);
+      }
+    };
+  }, []);
+
 
 
   // Radar Scanning Animation
