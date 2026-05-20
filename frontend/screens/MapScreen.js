@@ -479,6 +479,7 @@ export default function MapScreen({ navigation }) {
   };
 
   const handleRequestKarigar = async () => {
+    Keyboard.dismiss();
     if (!jobDescription.trim()) {
       showCustomAlert(
         "Request Details Required", 
@@ -616,14 +617,12 @@ export default function MapScreen({ navigation }) {
       // Delay to let the scanning animation play out for a premium effect
       setTimeout(() => {
         setIsScanning(false);
-        setMatchedProviders(matches);
         setMatchedService(service.value);
         setMatchedTime(time.value);
         setMatchedLocation(parsedLocation.value);
         setMatchedTimestamp(time.resolvedTimestamp || new Date().toISOString());
-        setShowMatches(true);
 
-        // Zoom the map to fit user and markers
+        // Zoom the map to fit user and markers first (while markers are hidden)
         if (mapRef.current && matches.length > 0) {
           const coords = matches.map(p => ({
             latitude: p.lat,
@@ -642,12 +641,18 @@ export default function MapScreen({ navigation }) {
           });
         }
 
-        showCustomAlert(
-          "Sellers Matched! 🚀",
-          `We've parsed your request and found 5 matching ${service.value}s nearby who are available for ${time.value}! Check the map to see their ratings and locations.`,
-          [{ text: "View Matches", onPress: () => {} }],
-          "success"
-        );
+        // Wait for the map zoom animation to complete before rendering markers and alert
+        setTimeout(() => {
+          setMatchedProviders(matches);
+          setShowMatches(true);
+
+          showCustomAlert(
+            "Sellers Matched! 🚀",
+            `We've parsed your request and found 5 matching ${service.value}s nearby who are available for ${time.value}! Check the map to see their ratings and locations.`,
+            [{ text: "View Matches", onPress: () => {} }],
+            "success"
+          );
+        }, 800);
       }, 2500);
 
     } catch (error) {
@@ -2216,6 +2221,23 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 11,
     fontWeight: "bold",
+  },
+  editRequestBtn: {
+    backgroundColor: "white",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    marginRight: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  editRequestText: {
+    fontFamily: "DMSans_700Bold",
+    fontSize: 12,
+    color: "#065F46",
   },
   notificationToast: {
     position: "absolute",
