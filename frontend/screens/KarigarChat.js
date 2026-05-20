@@ -1084,7 +1084,7 @@ export default function KarigarChat({ route, navigation }) {
 
       {/* ── 5. Message Input Bar ── */}
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "padding"}
         keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
       >
         <View style={styles.inputContainer}>
@@ -1094,8 +1094,11 @@ export default function KarigarChat({ route, navigation }) {
             placeholderTextColor="#9CA3AF"
             value={inputText}
             onChangeText={setInputText}
-            multiline
+            multiline={false}
             maxLength={1000}
+            returnKeyType="send"
+            onSubmitEditing={handleSendMessage}
+            blurOnSubmit={false}
           />
           <TouchableOpacity
             style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}

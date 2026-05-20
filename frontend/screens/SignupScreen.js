@@ -123,7 +123,7 @@ export default function SignupScreen({ navigation }) {
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor="#f4f7f5" />
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={Platform.OS === "ios" ? "padding" : "padding"}
         style={{ flex: 1 }}
       >
         <ScrollView
@@ -168,6 +168,8 @@ export default function SignupScreen({ navigation }) {
                     maxLength={12}
                     onFocus={() => setFocused(true)}
                     onBlur={() => setFocused(false)}
+                    returnKeyType="done"
+                    onSubmitEditing={handleSignup}
                   />
                 </View>
 

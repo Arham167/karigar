@@ -90,7 +90,7 @@ export default function VerifyOTPScreen({ navigation, route }) {
       <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
         <View style={{ flex: 1 }}>
           <KeyboardAvoidingView 
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            behavior={Platform.OS === "ios" ? "padding" : "padding"}
             style={styles.container}
           >
             <View style={styles.content}>
@@ -109,6 +109,8 @@ export default function VerifyOTPScreen({ navigation, route }) {
                 keyboardType="number-pad"
                 maxLength={6}
                 autoFocus={true}
+                returnKeyType="done"
+                onSubmitEditing={handleVerify}
               />
 
               {error ? <Text style={styles.error}>{error}</Text> : null}

@@ -1173,10 +1173,13 @@ export default function MapScreen({ navigation }) {
                     <TextInput
                       placeholder="e.g. I need a plumber to fix a leaking tap in Gulshan."
                       placeholderTextColor="#9CA3AF"
-                      multiline
+                      multiline={false}
                       style={styles.textArea}
                       value={jobDescription}
                       onChangeText={setJobDescription}
+                      returnKeyType="send"
+                      onSubmitEditing={handleRequestKarigar}
+                      blurOnSubmit={false}
                     />
                   </View>
 
