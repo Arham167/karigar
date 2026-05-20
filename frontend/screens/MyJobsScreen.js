@@ -186,10 +186,10 @@ export default function MyJobsScreen({ navigation }) {
     return (
       <View key={job.id} style={styles.jobCard}>
         <View style={styles.cardHeader}>
-          <Image source={{ uri: job.customerAvatar }} style={styles.avatar} />
+          <Image source={{ uri: job.customerAvatar || "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200" }} style={styles.avatar} />
           <View style={styles.customerInfo}>
-            <Text style={styles.customerName}>{job.customerName}</Text>
-            <Text style={styles.serviceText}>{job.service_type}</Text>
+            <Text style={styles.customerName}>{String(job.customerName || "Customer")}</Text>
+            <Text style={styles.serviceText}>{String(job.service_type || "Service")}</Text>
           </View>
           <View style={[styles.statusBadge, { backgroundColor: statusBg }]}>
             <StatusIcon size={12} color={statusColor} />
@@ -209,7 +209,7 @@ export default function MyJobsScreen({ navigation }) {
         <View style={[styles.detailsRow, { marginTop: 8 }]}>
           <View style={styles.detailItem}>
             <MapPin size={14} color="#6B7280" />
-            <Text style={styles.detailText} numberOfLines={2}>{job.location}</Text>
+            <Text style={styles.detailText} numberOfLines={2}>{String(job.location || "Location not set")}</Text>
           </View>
         </View>
       </View>
@@ -217,7 +217,7 @@ export default function MyJobsScreen({ navigation }) {
   };
 
   const renderTabContent = () => {
-    const activeJobs = jobs[activeTab];
+    const activeJobs = jobs[activeTab] || [];
 
     if (loading) {
       return (
@@ -271,11 +271,11 @@ export default function MyJobsScreen({ navigation }) {
           onPress={() => setActiveTab("current")}
         >
           <Text style={[styles.tabText, activeTab === "current" && styles.activeTabText]}>Current</Text>
-          {jobs.current.length > 0 && (
+          {jobs.current && jobs.current.length > 0 ? (
             <View style={styles.badge}>
               <Text style={styles.badgeText}>{jobs.current.length}</Text>
             </View>
-          )}
+          ) : null}
         </TouchableOpacity>
 
         <TouchableOpacity 
