@@ -923,8 +923,8 @@ export default function KarigarChat({ route, navigation }) {
       if (response.ok) {
         const data = await response.json();
         if (data.success) {
-          Alert.alert("Dispute Filed", "Your dispute has been logged. Our AI evaluation has processed the evidence. " + (data.dispute.resolution || "Action taken."));
-          setShowDisputeModal(false);
+          setDisputeResultData(data.dispute);
+          setShowDisputeResultModal(true);
           setBookingStatus("disputed");
           
           // Optionally add a system message to chat
@@ -952,6 +952,8 @@ export default function KarigarChat({ route, navigation }) {
 
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [showDisputeResultModal, setShowDisputeResultModal] = useState(false);
+  const [disputeResultData, setDisputeResultData] = useState(null);
 
   const confirmCancelBooking = async () => {
     setIsCancelling(true);
@@ -1136,13 +1138,17 @@ export default function KarigarChat({ route, navigation }) {
           <TouchableOpacity
             style={[
               styles.bookNowBtn,
-              !bothAgreed && styles.bookNowBtnDisabled
+              (!bothAgreed || bookingStatus === "cancelled" || bookingStatus === "disputed" || bookingStatus === "completed") && styles.bookNowBtnDisabled
             ]}
             activeOpacity={0.8}
             onPress={handleFinalBookNow}
-            disabled={!bothAgreed}
+            disabled={!bothAgreed || bookingStatus === "cancelled" || bookingStatus === "disputed" || bookingStatus === "completed"}
           >
-            {(bookingStatus === "confirmed" || bookingStatus === "accepted") ? (
+            {bookingStatus === "cancelled" ? (
+              <Text style={[styles.bookNowBtnText, styles.bookNowBtnTextDisabled]}>Booking Cancelled 🚫</Text>
+            ) : bookingStatus === "disputed" ? (
+              <Text style={[styles.bookNowBtnText, styles.bookNowBtnTextDisabled]}>Dispute Under Review ⚠️</Text>
+            ) : (bookingStatus === "confirmed" || bookingStatus === "accepted") ? (
               <Text style={styles.bookNowBtnText}>Booking Confirmed! 🎉</Text>
             ) : (
               <>
@@ -1154,8 +1160,18 @@ export default function KarigarChat({ route, navigation }) {
             )}
           </TouchableOpacity>
         ) : (
-          <View style={[styles.sellerStatusCard, bothAgreed && styles.sellerStatusCardUnlocked]}>
-            {(bookingStatus === "confirmed" || bookingStatus === "accepted") ? (
+          <View style={[styles.sellerStatusCard, (bothAgreed || bookingStatus === "cancelled" || bookingStatus === "disputed") && styles.sellerStatusCardUnlocked]}>
+            {bookingStatus === "cancelled" ? (
+              <View style={styles.sellerStatusRow}>
+                <AlertCircle size={18} color="#EF4444" style={{ marginRight: 8 }} />
+                <Text style={[styles.sellerStatusTextLocked, { color: '#EF4444' }]}>Booking Cancelled 🚫</Text>
+              </View>
+            ) : bookingStatus === "disputed" ? (
+              <View style={styles.sellerStatusRow}>
+                <AlertTriangle size={18} color="#B45309" style={{ marginRight: 8 }} />
+                <Text style={[styles.sellerStatusTextLocked, { color: '#B45309' }]}>Dispute Under Review ⚠️</Text>
+              </View>
+            ) : (bookingStatus === "confirmed" || bookingStatus === "accepted") ? (
               <View style={styles.sellerStatusRow}>
                 <CheckCircle2 size={18} color="#059669" style={{ marginRight: 8 }} />
                 <Text style={styles.sellerStatusTextLocked}>Booking Confirmed! 🎉 Client has booked you.</Text>
@@ -1350,6 +1366,36 @@ export default function KarigarChat({ route, navigation }) {
           </View>
         </View>
       </Modal>
+      {/* ── 9. Dispute Result Modal ── */}
+      <Modal visible={showDisputeResultModal} transparent={true} animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={[styles.successIconWrapper, {backgroundColor: '#FEF2F2'}]}>
+              <AlertTriangle size={48} color="#EF4444" />
+            </View>
+            <Text style={styles.modalTitle}>AI Dispute Resolution</Text>
+            <Text style={[styles.modalSubtitle, {textAlign: 'left', marginBottom: 12}]}>
+              <Text style={{fontFamily: 'DMSans_700Bold'}}>Evaluation: </Text>
+              {disputeResultData?.antigravity_evaluation || "Under review"}
+            </Text>
+            <Text style={[styles.modalSubtitle, {textAlign: 'left', marginBottom: 20}]}>
+              <Text style={{fontFamily: 'DMSans_700Bold'}}>Action Taken: </Text>
+              {disputeResultData?.resolution || "Pending"}
+            </Text>
+
+            <TouchableOpacity 
+              style={[styles.successBtn, {width: '100%', backgroundColor: '#EF4444'}]} 
+              onPress={() => {
+                setShowDisputeResultModal(false);
+                setShowDisputeModal(false);
+              }}
+            >
+              <Text style={styles.successBtnText}>Got it</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 }
