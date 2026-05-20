@@ -124,7 +124,11 @@ export default function MyJobsScreen({ navigation }) {
       });
 
       // Sort past jobs newest first
-      categorized.past.sort((a, b) => new Date(b.requested_time) - new Date(a.requested_time));
+      categorized.past.sort((a, b) => {
+        const timeA = new Date(a.requested_time || 0).getTime() || 0;
+        const timeB = new Date(b.requested_time || 0).getTime() || 0;
+        return timeB - timeA;
+      });
 
       setJobs(categorized);
     } catch (err) {
