@@ -138,6 +138,12 @@ export default function KarigarChat({ route, navigation }) {
   // Success booking state
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
+  // Dispute state
+  const [showDisputeModal, setShowDisputeModal] = useState(false);
+  const [disputeType, setDisputeType] = useState("quality");
+  const [disputeDescription, setDisputeDescription] = useState("");
+  const [filingDispute, setFilingDispute] = useState(false);
+
   const scrollViewRef = useRef(null);
 
   // Split professional name
@@ -892,6 +898,57 @@ export default function KarigarChat({ route, navigation }) {
     });
   };
 
+  const handleFileDispute = async () => {
+    if (!disputeType) {
+      Alert.alert("Required", "Please select a dispute type");
+      return;
+    }
+    try {
+      setFilingDispute(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      const activeUser = user ? user.id : currentUserIdRef.current;
+      
+      const response = await fetch(`${BASE_URL}/api/disputes/file`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Bypass-Tunnel-Reminder": "true" },
+        body: JSON.stringify({
+          bookingId: bookingId,
+          filerId: activeUser,
+          disputeType: disputeType,
+          description: disputeDescription
+        })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          Alert.alert("Dispute Filed", "Your dispute has been logged. Our AI evaluation has processed the evidence. " + (data.dispute.resolution || "Action taken."));
+          setShowDisputeModal(false);
+          setBookingStatus("disputed");
+          
+          // Optionally add a system message to chat
+          const lockMsg = {
+            id: Date.now() + 10,
+            system: true,
+            isLock: false,
+            text: `⚠️ Dispute Filed: ${disputeType.toUpperCase()}. ${data.dispute.antigravity_evaluation || "Reviewing..."}`
+          };
+          updateMessages([...messagesRef.current, lockMsg]);
+          setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 200);
+
+        } else {
+          Alert.alert("Error", data.error || "Failed to file dispute");
+        }
+      } else {
+        Alert.alert("Error", "Server returned an error");
+      }
+    } catch (e) {
+      Alert.alert("Error", "Network error while filing dispute");
+    } finally {
+      setFilingDispute(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" translucent={true} backgroundColor="transparent" />
@@ -926,6 +983,11 @@ export default function KarigarChat({ route, navigation }) {
               <Lock size={12} color="#A7F3D0" />
               <Text style={styles.encryptedText}>Secure</Text>
             </View>
+            {(bookingStatus === "confirmed" || bookingStatus === "accepted" || bookingStatus === "completed" || bothAgreed) && role === "buyer" && (
+              <TouchableOpacity onPress={() => setShowDisputeModal(true)} style={{marginTop: 6, alignItems: 'center'}}>
+                <Text style={{color: '#FCD34D', fontSize: 10, fontFamily: 'DMSans_700Bold'}}>File Dispute</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </View>
@@ -1158,6 +1220,48 @@ export default function KarigarChat({ route, navigation }) {
             >
               <Text style={styles.successBtnText}>Back to Dashboard</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── 7. Dispute Modal ── */}
+      <Modal visible={showDisputeModal} transparent={true} animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={[styles.successIconWrapper, {backgroundColor: '#FEF2F2'}]}>
+              <AlertTriangle size={48} color="#EF4444" />
+            </View>
+            <Text style={styles.modalTitle}>File a Dispute</Text>
+            <Text style={styles.modalSubtitle}>Please select the reason for your dispute. Our AI will review chat history and resolve automatically.</Text>
+            
+            <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16, justifyContent: 'center'}}>
+              {['quality', 'price', 'no-show', 'late'].map(t => (
+                <TouchableOpacity 
+                  key={t}
+                  style={{paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20, backgroundColor: disputeType === t ? '#EF4444' : '#F3F4F6'}}
+                  onPress={() => setDisputeType(t)}
+                >
+                  <Text style={{color: disputeType === t ? 'white' : '#4B5563', fontFamily: 'DMSans_700Bold', fontSize: 12}}>{t.toUpperCase()}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TextInput
+              style={[styles.input, {width: '100%', minHeight: 80, marginBottom: 20, textAlignVertical: 'top'}]}
+              placeholder="Describe the issue..."
+              multiline
+              value={disputeDescription}
+              onChangeText={setDisputeDescription}
+            />
+
+            <View style={{flexDirection: 'row', gap: 12, width: '100%'}}>
+              <TouchableOpacity style={[styles.successBtn, {flex: 1, backgroundColor: '#F3F4F6'}]} onPress={() => setShowDisputeModal(false)}>
+                <Text style={[styles.successBtnText, {color: '#4B5563'}]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.successBtn, {flex: 1, backgroundColor: '#EF4444'}]} onPress={handleFileDispute} disabled={filingDispute}>
+                {filingDispute ? <ActivityIndicator color="white" /> : <Text style={styles.successBtnText}>Submit</Text>}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
