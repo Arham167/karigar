@@ -29,7 +29,8 @@ import {
   MapPin,
   Calendar,
   ThumbsUp,
-  AlertCircle
+  AlertCircle,
+  AlertTriangle
 } from "lucide-react-native";
 import { supabase } from "../utils/supabase";
 import { syncBookingsAndManageReminders, showBookingConfirmedNotification } from "../utils/notificationManager";

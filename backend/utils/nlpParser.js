@@ -447,16 +447,11 @@ exports.parseRequest = async (text) => {
   const hasLocation = heuristicLocation && heuristicLocation.value;
 
   if (hasService && hasTime && hasLocation) {
-    const result = {
-      service: heuristicService,
-      time: heuristicTime,
-      location: heuristicLocation
-    };
-    console.log("[NLP Engine] Successfully parsed via Heuristics (Primary):", JSON.stringify(result));
-    return result;
+    console.log("[NLP Engine] Successfully parsed via Heuristics (Primary):", JSON.stringify({ service: heuristicService, time: heuristicTime, location: heuristicLocation }));
+    // Do not return early, allow Gemini to extract budget_sensitivity and time_sensitivity
   }
 
-  console.log("[NLP Engine] Heuristics incomplete. Falling back to Gemini LLM for deep extraction...");
+  console.log("[NLP Engine] Attempting extraction via Gemini LLM to get deep details (budget/time sensitivity)...");
 
   // Step B: Fallback to Standard Gemini LLM (Intelligent Semantic Extraction)
   const geminiKey = process.env.GEMINI_API_KEY;
@@ -464,7 +459,11 @@ exports.parseRequest = async (text) => {
     console.log("[NLP Engine] Attempting extraction via standard Google Gemini API (Fallback)");
     const geminiResult = await parseViaGemini(text, geminiKey);
     if (geminiResult) {
-      if (geminiResult.time && geminiResult.time.value) {
+      if (!geminiResult.service?.value && heuristicService) geminiResult.service = heuristicService;
+      if (!geminiResult.time?.value && heuristicTime) geminiResult.time = heuristicTime;
+      if (!geminiResult.location?.value && heuristicLocation) geminiResult.location = heuristicLocation;
+
+      if (geminiResult.time && geminiResult.time.value && !geminiResult.time.resolvedTimestamp) {
         geminiResult.time.resolvedTimestamp = resolveTimeToDate(geminiResult.time.value);
       }
       console.log("[NLP Engine] Successfully parsed via Gemini (Fallback):", JSON.stringify(geminiResult));
