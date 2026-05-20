@@ -194,35 +194,7 @@ function MyJobsScreen({ navigation }) {
     }
 
     return (
-      <View key={job.id || Math.random().toString()} style={styles.jobCard}>
-        <View style={styles.cardHeader}>
-          <Image source={{ uri: job.customerAvatar || "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200" }} style={styles.avatar} />
-          <View style={styles.customerInfo}>
-            <Text style={styles.customerName}>{String(job.customerName || "Customer")}</Text>
-            <Text style={styles.serviceText}>{String(job.service_type || "Service")}</Text>
-          </View>
-          <View style={[styles.statusBadge, { backgroundColor: statusBg }]}>
-            <StatusIcon size={12} color={statusColor} />
-            <Text style={[styles.statusBadgeText, { color: statusColor }]}>{statusText}</Text>
-          </View>
-        </View>
-
-        <View style={styles.divider} />
-
-        <View style={styles.detailsRow}>
-          <View style={styles.detailItem}>
-            <Clock size={14} color="#6B7280" />
-            <Text style={styles.detailText}>{formatJobTime(job.requested_time)}</Text>
-          </View>
-        </View>
-        
-        <View style={[styles.detailsRow, { marginTop: 8 }]}>
-          <View style={styles.detailItem}>
-            <MapPin size={14} color="#6B7280" />
-            <Text style={styles.detailText} numberOfLines={2}>{String(job.location || "Location not set")}</Text>
-          </View>
-        </View>
-      </View>
+      <View key={job.id || Math.random().toString()} style={styles.jobCard}><View style={styles.cardHeader}><Image source={{ uri: job.customerAvatar || "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200" }} style={styles.avatar} /><View style={styles.customerInfo}><Text style={styles.customerName}>{String(job.customerName || "Customer")}</Text><Text style={styles.serviceText}>{String(job.service_type || "Service")}</Text></View><View style={[styles.statusBadge, { backgroundColor: statusBg }]}><StatusIcon size={12} color={statusColor} /><Text style={[styles.statusBadgeText, { color: statusColor }]}>{statusText}</Text></View></View><View style={styles.divider} /><View style={styles.detailsRow}><View style={styles.detailItem}><Clock size={14} color="#6B7280" /><Text style={styles.detailText}>{formatJobTime(job.requested_time)}</Text></View></View><View style={[styles.detailsRow, { marginTop: 8 }]}><View style={styles.detailItem}><MapPin size={14} color="#6B7280" /><Text style={styles.detailText} numberOfLines={2}>{String(job.location || "Location not set")}</Text></View></View></View>
     );
   };
 
@@ -255,58 +227,7 @@ function MyJobsScreen({ navigation }) {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#032F23" />
-      
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <ArrowLeft size={24} color="white" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>My Jobs Manager</Text>
-        <View style={{ width: 40 }} /> {/* Placeholder for balance */}
-      </View>
-
-      {/* Tabs */}
-      <View style={styles.tabContainer}>
-        <TouchableOpacity 
-          style={[styles.tabBtn, activeTab === "past" && styles.activeTabBtn]} 
-          onPress={() => setActiveTab("past")}
-        >
-          <Text style={[styles.tabText, activeTab === "past" && styles.activeTabText]}>Past Jobs</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={[styles.tabBtn, activeTab === "current" && styles.activeTabBtn]} 
-          onPress={() => setActiveTab("current")}
-        >
-          <Text style={[styles.tabText, activeTab === "current" && styles.activeTabText]}>Current</Text>
-          {jobs.current && jobs.current.length > 0 ? (
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>{String(jobs.current.length)}</Text>
-            </View>
-          ) : null}
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={[styles.tabBtn, activeTab === "future" && styles.activeTabBtn]} 
-          onPress={() => setActiveTab("future")}
-        >
-          <Text style={[styles.tabText, activeTab === "future" && styles.activeTabText]}>Future Jobs</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Content */}
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={["#065F46"]} />
-        }
-      >
-        {renderTabContent()}
-      </ScrollView>
-    </SafeAreaView>
+    <SafeAreaView style={styles.container}><StatusBar barStyle="light-content" backgroundColor="#032F23" /><View style={styles.header}><TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}><ArrowLeft size={24} color="white" /></TouchableOpacity><Text style={styles.headerTitle}>My Jobs Manager</Text><View style={{ width: 40 }} /></View><View style={styles.tabContainer}><TouchableOpacity style={[styles.tabBtn, activeTab === "past" && styles.activeTabBtn]} onPress={() => setActiveTab("past")}><Text style={[styles.tabText, activeTab === "past" && styles.activeTabText]}>Past Jobs</Text></TouchableOpacity><TouchableOpacity style={[styles.tabBtn, activeTab === "current" && styles.activeTabBtn]} onPress={() => setActiveTab("current")}><Text style={[styles.tabText, activeTab === "current" && styles.activeTabText]}>Current</Text>{(jobs.current && jobs.current.length > 0) ? (<View style={styles.badge}><Text style={styles.badgeText}>{String(jobs.current.length)}</Text></View>) : null}</TouchableOpacity><TouchableOpacity style={[styles.tabBtn, activeTab === "future" && styles.activeTabBtn]} onPress={() => setActiveTab("future")}><Text style={[styles.tabText, activeTab === "future" && styles.activeTabText]}>Future Jobs</Text></TouchableOpacity></View><ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={["#065F46"]} />}>{renderTabContent()}</ScrollView></SafeAreaView>
   );
 }
 
