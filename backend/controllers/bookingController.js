@@ -231,7 +231,6 @@ exports.cancelBooking = async (req, res) => {
     const { data: alternatives, error: altError } = await supabase
       .from("providers")
       .select("*")
-      .eq("location", booking.location || "Karachi")
       .neq("id", booking.provider_id || booking.seller_id) // Exclude the one who cancelled
       .order("base_rating", { ascending: false })
       .limit(5);
