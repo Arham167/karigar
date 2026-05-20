@@ -20,7 +20,7 @@ import {
 } from "lucide-react-native";
 import { supabase } from "../utils/supabase";
 
-export default function MyJobsScreen({ navigation }) {
+function MyJobsScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState("current"); // "past", "current", "future"
@@ -104,30 +104,36 @@ export default function MyJobsScreen({ navigation }) {
         if (job.status === "completed") {
           categorized.past.push(job);
         } else if (job.status === "confirmed" || job.status === "accepted") {
-          const jobTime = new Date(job.requested_time);
-          
-          // If job time is today and within a 2-hour window (e.g. 1 hr before and 1 hr after)
-          // Or if the job time has passed but it's not marked complete yet, consider it current.
-          const timeDiffHours = (jobTime - now) / (1000 * 60 * 60);
+          let timeDiffHours = 0;
+          try {
+            const jobTime = new Date(job.requested_time);
+            if (!isNaN(jobTime.getTime())) {
+              timeDiffHours = (jobTime.getTime() - now.getTime()) / (1000 * 60 * 60);
+            }
+          } catch(e) {}
           
           if (timeDiffHours <= 1 && timeDiffHours >= -12) {
-            // It's happening soon or has recently happened (up to 12 hours ago) and still not marked complete
             categorized.current.push(job);
           } else if (timeDiffHours > 1) {
-            // It's clearly in the future
             categorized.future.push(job);
           } else {
-            // It's old but still marked confirmed/accepted. We can put it in current to prompt action.
             categorized.current.push(job);
           }
         }
       });
 
-      // Sort past jobs newest first
+      // Sort past jobs newest first safely
       categorized.past.sort((a, b) => {
-        const timeA = new Date(a.requested_time || 0).getTime() || 0;
-        const timeB = new Date(b.requested_time || 0).getTime() || 0;
-        return timeB - timeA;
+        try {
+          const tA = a && a.requested_time ? new Date(a.requested_time).getTime() : 0;
+          const tB = b && b.requested_time ? new Date(b.requested_time).getTime() : 0;
+          const numA = isNaN(tA) ? 0 : tA;
+          const numB = isNaN(tB) ? 0 : tB;
+          const diff = numB - numA;
+          return isNaN(diff) ? 0 : diff;
+        } catch(e) {
+          return 0;
+        }
       });
 
       setJobs(categorized);
@@ -188,7 +194,7 @@ export default function MyJobsScreen({ navigation }) {
     }
 
     return (
-      <View key={job.id} style={styles.jobCard}>
+      <View key={job.id || Math.random().toString()} style={styles.jobCard}>
         <View style={styles.cardHeader}>
           <Image source={{ uri: job.customerAvatar || "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200" }} style={styles.avatar} />
           <View style={styles.customerInfo}>
@@ -277,7 +283,7 @@ export default function MyJobsScreen({ navigation }) {
           <Text style={[styles.tabText, activeTab === "current" && styles.activeTabText]}>Current</Text>
           {jobs.current && jobs.current.length > 0 ? (
             <View style={styles.badge}>
-              <Text style={styles.badgeText}>{jobs.current.length}</Text>
+              <Text style={styles.badgeText}>{String(jobs.current.length)}</Text>
             </View>
           ) : null}
         </TouchableOpacity>
@@ -474,3 +480,52 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 });
+
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null, errorInfo: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    this.setState({ errorInfo });
+    console.error("MyJobsScreen Crash Caught:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#FEF2F2', padding: 20, paddingTop: 40 }}>
+          <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#991B1B', marginBottom: 10 }}>App Crash Intercepted!</Text>
+          <ScrollView style={{ flex: 1 }}>
+            <Text style={{ fontSize: 14, color: '#7F1D1D', fontWeight: 'bold' }}>Error:</Text>
+            <Text style={{ fontSize: 12, color: '#7F1D1D', marginBottom: 15 }}>{this.state.error?.toString()}</Text>
+            
+            <Text style={{ fontSize: 14, color: '#7F1D1D', fontWeight: 'bold' }}>Component Stack:</Text>
+            <Text style={{ fontSize: 10, color: '#7F1D1D', fontFamily: 'monospace' }}>{this.state.errorInfo?.componentStack}</Text>
+          </ScrollView>
+          <TouchableOpacity 
+            style={{ backgroundColor: '#991B1B', padding: 15, borderRadius: 8, alignItems: 'center', marginTop: 20 }}
+            onPress={() => this.setState({ hasError: false })}
+          >
+            <Text style={{ color: 'white', fontWeight: 'bold' }}>Try Again</Text>
+          </TouchableOpacity>
+        </SafeAreaView>
+      );
+    }
+
+    return this.props.children; 
+  }
+}
+
+export default function MyJobsScreenWrapper(props) {
+  return (
+    <ErrorBoundary>
+      <MyJobsScreen {...props} />
+    </ErrorBoundary>
+  );
+}
