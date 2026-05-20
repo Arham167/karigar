@@ -11,6 +11,7 @@ exports.getUserBookings = async (req, res) => {
 
 exports.confirmBooking = async (req, res) => {
   try {
+    console.log("[Booking Controller - confirmBooking] Request received with body:", JSON.stringify(req.body));
     const { 
       bookingId, 
       buyerId, 
@@ -26,7 +27,7 @@ exports.confirmBooking = async (req, res) => {
     let booking;
 
     if (bookingId) {
-      console.log(`[Booking Controller] Confirming existing booking ID: ${bookingId}`);
+      console.log(`[Booking Controller - confirmBooking] Confirming existing booking ID: ${bookingId}`);
       
       const updateData = {
         status: "accepted",
@@ -35,6 +36,7 @@ exports.confirmBooking = async (req, res) => {
       
       if (price) {
         updateData.price = price;
+        console.log(`[Booking Controller - confirmBooking] Updating price to ${price}`);
       }
 
       const { data, error } = await supabase
@@ -44,17 +46,19 @@ exports.confirmBooking = async (req, res) => {
         .select();
 
       if (error) {
-        console.error("[Booking Controller] Error updating booking status:", error);
+        console.error("[Booking Controller - confirmBooking] Error updating booking status:", error.message, error.stack);
         return res.status(500).json({ success: false, error: error.message });
       }
 
       if (!data || data.length === 0) {
+        console.warn(`[Booking Controller - confirmBooking] Booking not found for ID: ${bookingId}`);
         return res.status(404).json({ success: false, error: "Booking not found." });
       }
 
       booking = data[0];
+      console.log(`[Booking Controller - confirmBooking] Successfully updated booking ID: ${bookingId}`);
     } else {
-      console.log("[Booking Controller] Creating and confirming a new direct booking");
+      console.log("[Booking Controller - confirmBooking] Creating and confirming a new direct booking");
       
       const insertData = {
         buyer_id: buyerId,
@@ -73,19 +77,22 @@ exports.confirmBooking = async (req, res) => {
         .select();
 
       if (error) {
-        console.error("[Booking Controller] Error inserting booking:", error);
+        console.error("[Booking Controller - confirmBooking] Error inserting new booking:", error.message, error.stack);
         return res.status(500).json({ success: false, error: error.message });
       }
 
       booking = data[0];
+      console.log(`[Booking Controller - confirmBooking] Successfully created new booking with ID: ${booking.id}`);
     }
 
     // Sync booking to Google Sheets CRM
     const SPREADSHEET_ID = process.env.SHARED_GOOGLE_SHEET_ID;
     if (SPREADSHEET_ID) {
+      console.log(`[Booking Controller - confirmBooking] Initiating Google Sheets CRM sync for Spreadsheet ID: ${SPREADSHEET_ID}`);
       // Execute Sheets sync async in background so we don't delay client response
       (async () => {
         try {
+          console.log(`[Booking Controller - SheetsSync] Fetching buyer profile for ID: ${booking.buyer_id}`);
           // 1. Get Client (Buyer) Name
           const { data: buyerProfile } = await supabase
             .from("profiles")
@@ -96,6 +103,7 @@ exports.confirmBooking = async (req, res) => {
           // 2. Get Seller (Provider) Business Name
           let sellerBusinessName = "Professional Karigar";
           if (booking.seller_id) {
+            console.log(`[Booking Controller - SheetsSync] Fetching seller business name for ID: ${booking.seller_id}`);
             const { data: provider } = await supabase
               .from("providers")
               .select("business_name")
@@ -104,7 +112,9 @@ exports.confirmBooking = async (req, res) => {
 
             if (provider && provider.business_name) {
               sellerBusinessName = provider.business_name;
+              console.log(`[Booking Controller - SheetsSync] Found seller business name: ${sellerBusinessName}`);
             } else {
+              console.log(`[Booking Controller - SheetsSync] Fallback: Fetching seller profile name for ID: ${booking.seller_id}`);
               const { data: sellerProfile } = await supabase
                 .from("profiles")
                 .select("name")
@@ -112,11 +122,12 @@ exports.confirmBooking = async (req, res) => {
                 .single();
               if (sellerProfile && sellerProfile.name) {
                 sellerBusinessName = sellerProfile.name;
+                console.log(`[Booking Controller - SheetsSync] Found seller profile name: ${sellerBusinessName}`);
               }
             }
           }
 
-          console.log(`[Booking Controller] Syncing confirmed booking to Google Sheet for seller: ${sellerBusinessName}`);
+          console.log(`[Booking Controller - SheetsSync] Appending confirmed booking to Google Sheet for seller: ${sellerBusinessName}`);
 
           await googleSheets.appendBookingToSheet(SPREADSHEET_ID, {
             confirmedTime: booking.confirmed_time,
@@ -129,21 +140,23 @@ exports.confirmBooking = async (req, res) => {
             sellerId: booking.seller_id,
             sellerBusinessName: sellerBusinessName
           });
+          console.log(`[Booking Controller - SheetsSync] Google Sheets sync completed successfully!`);
         } catch (syncErr) {
-          console.error("[Booking Controller] Background Google Sheet sync failed:", syncErr.message);
+          console.error("[Booking Controller - SheetsSync] Background Google Sheet sync failed:", syncErr.message, syncErr.stack);
         }
       })();
     } else {
-      console.warn("[Booking Controller] SHARED_GOOGLE_SHEET_ID environment variable is not defined. CRM sync skipped.");
+      console.warn("[Booking Controller - confirmBooking] SHARED_GOOGLE_SHEET_ID environment variable is not defined. CRM sync skipped.");
     }
 
+    console.log(`[Booking Controller - confirmBooking] Returning successful response to client for booking ID: ${booking.id}`);
     return res.status(200).json({
       success: true,
       booking
     });
 
   } catch (error) {
-    console.error("[Booking Controller] Exception in confirmBooking:", error);
+    console.error("[Booking Controller - confirmBooking] Exception in confirmBooking:", error.message, error.stack);
     return res.status(500).json({
       success: false,
       error: "An internal server error occurred while confirming booking."

@@ -202,42 +202,55 @@ async function parseViaGemini(text, apiKey) {
     const systemPrompt = `
 You are an expert multilingual entity extractor for a local home-services app named "Karigar".
 Analyze the user's service request, which can be in English, Urdu, or Roman Urdu (Urdu written in English alphabets like "mujhe plumber chahiye").
-Extract exactly 3 entities:
+Extract exactly 5 entities:
 1. "service" (the type of service or technician requested, e.g., Plumber, Electrician, AC Repair, Carpenter, Painter, Cleaner, etc.)
 2. "time" (when they need it, e.g., Today, Tomorrow, 5 PM, Immediately, Tomorrow Morning, etc.)
 3. "location" (the city, area, sector, or neighborhood mentioned, e.g., Gulshan-e-Iqbal, G-13, Clifton, Lahore, etc.)
+4. "budget_sensitivity" (the budget sensitivity of the user. Should be "Low", "Flexible", "High", or null if not explicitly mentioned. e.g. "sasta" -> "Low", "acha" -> "High", "normal" -> "Flexible")
+5. "time_sensitivity" (the urgency of the task. Should be "High", "Flexible", "Low", or null if not explicitly mentioned. e.g. "urgent", "abhi" -> "High", "sakoon se" -> "Low", "koi jaldi nahi" -> "Low")
 
-Your response MUST be strict JSON, with keys: "service", "time", "location".
+Your response MUST be strict JSON, with keys: "service", "time", "location", "budget_sensitivity", "time_sensitivity".
 Each key must be a JSON object with:
 - "value": string (the parsed value normalized) or null if not found.
 - "confidence": a float between 0.0 and 1.0 representing your confidence, or null if value is null.
 
-Example Input: "mujhe kal subah gulshan mein ac repair k liye banda chahiye"
+Example Input: "mujhe kal subah gulshan mein ac repair k liye banda chahiye sasta ho or jaldi aye"
 Example Output:
 {
   "service": { "value": "AC Repair", "confidence": 0.98 },
   "time": { "value": "Tomorrow Morning", "confidence": 0.95 },
-  "location": { "value": "Gulshan", "confidence": 0.95 }
+  "location": { "value": "Gulshan", "confidence": 0.95 },
+  "budget_sensitivity": { "value": "Low", "confidence": 0.9 },
+  "time_sensitivity": { "value": "High", "confidence": 0.9 }
 }
 
 Provide ONLY the raw JSON output block. Do not include any explanation or markdown formatting outside of the JSON.
 `;
 
+    console.log(`[NLP Engine - Gemini] Sending request to Gemini model...`);
+    const payloadStart = Date.now();
     const result = await model.generateContent({
       contents: [{ role: "user", parts: [{ text: `${systemPrompt}\n\nUser Request: "${text}"` }] }],
       generationConfig: {
         responseMimeType: "application/json"
       }
     });
-
+    
+    console.log(`[NLP Engine - Gemini] Response received in ${Date.now() - payloadStart}ms.`);
     const contentText = result.response.text().trim();
+    console.log(`[NLP Engine - Gemini] Raw response from Gemini:`, contentText);
+
     // Parse the JSON blocks
     const jsonMatch = contentText.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
+      const parsedJson = JSON.parse(jsonMatch[0]);
+      console.log(`[NLP Engine - Gemini] Successfully parsed JSON structure:`, JSON.stringify(parsedJson, null, 2));
+      return parsedJson;
+    } else {
+      console.warn(`[NLP Engine - Gemini] Could not find valid JSON in Gemini response.`);
     }
   } catch (error) {
-    console.error("Gemini Extraction failed. Falling back to local parser.", error);
+    console.error(`[NLP Engine - Gemini] Extraction failed. Error details:`, error.message, error.stack);
   }
   return null;
 }
@@ -496,6 +509,8 @@ Example 3: "ok done" -> {"price": null}
 Do not return any markdown or text outside of the JSON block.
 `;
 
+    console.log(`[NLP Price Extractor] Sending message to Gemini for price extraction...`);
+    const payloadStart = Date.now();
     const result = await model.generateContent({
       contents: [{ role: "user", parts: [{ text: `${systemPrompt}\n\nMessage: "${text}"` }] }],
       generationConfig: {
@@ -503,14 +518,20 @@ Do not return any markdown or text outside of the JSON block.
       }
     });
 
+    console.log(`[NLP Price Extractor] Response received in ${Date.now() - payloadStart}ms.`);
     const contentText = result.response.text().trim();
+    console.log(`[NLP Price Extractor] Raw response from Gemini:`, contentText);
+
     const jsonMatch = contentText.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
+      console.log(`[NLP Price Extractor] Successfully parsed price structure:`, JSON.stringify(parsed));
       return parsed.price || null;
+    } else {
+      console.warn(`[NLP Price Extractor] Could not find valid JSON in Gemini response.`);
     }
   } catch (error) {
-    console.error("[NLP Price Extractor] Error extracting price:", error.message);
+    console.error(`[NLP Price Extractor] Error extracting price:`, error.message, error.stack);
   }
   return null;
 };

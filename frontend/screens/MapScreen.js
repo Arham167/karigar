@@ -525,7 +525,7 @@ export default function MapScreen({ navigation }) {
         throw new Error(parseResult.error || "Failed to analyze your request.");
       }
 
-      const { service, time, location: parsedLocation } = parseResult;
+      const { service, time, location: parsedLocation, budget_sensitivity, time_sensitivity } = parseResult;
 
       // Validate that service, time, and location are not null
       const missingDetails = [];
@@ -599,7 +599,9 @@ export default function MapScreen({ navigation }) {
           resolvedTimestamp: time.resolvedTimestamp || new Date().toISOString(),
           location: parsedLocation.value,
           latitude: userLat,
-          longitude: userLng
+          longitude: userLng,
+          budget_sensitivity: budget_sensitivity ? budget_sensitivity.value : null,
+          time_sensitivity: time_sensitivity ? time_sensitivity.value : null
         }),
       });
 

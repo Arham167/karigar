@@ -80,7 +80,9 @@ async function ensureMockRecordsExist() {
 // 1. Fetch chat messages for a specific booking
 exports.getMessages = async (req, res) => {
   const rawBookingId = req.params.bookingId;
+  console.log(`[ChatController - getMessages] Request received for bookingId: ${rawBookingId}`);
   if (!rawBookingId) {
+    console.error(`[ChatController - getMessages] Missing Booking ID.`);
     return res.status(400).json({ success: false, error: "Booking ID is required." });
   }
 
@@ -96,7 +98,7 @@ exports.getMessages = async (req, res) => {
 
     if (error) {
       if (error.code === "PGRST205" || error.message.includes("does not exist")) {
-        console.warn("Chats table not found in Supabase. Returning memory store fallback.");
+        console.warn(`[ChatController - getMessages] Chats table missing. Using memory fallback for bookingId: ${normId}`);
         const memMessages = global.chatMemoryStore[normId] || [];
         return res.status(200).json({ success: true, messages: memMessages, dbWarning: "chats_table_missing" });
       }
@@ -116,10 +118,11 @@ exports.getMessages = async (req, res) => {
     }
 
     combined.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    console.log(`[ChatController - getMessages] Successfully retrieved ${combined.length} messages for bookingId: ${normId}`);
 
     return res.status(200).json({ success: true, messages: combined });
   } catch (err) {
-    console.error("Error fetching chat messages:", err);
+    console.error("[ChatController - getMessages] Error fetching chat messages:", err.message, err.stack);
     const memMessages = global.chatMemoryStore[normId] || [];
     return res.status(200).json({ success: true, messages: memMessages, fallback: true });
   }
@@ -128,8 +131,10 @@ exports.getMessages = async (req, res) => {
 // 2. Send a new chat message
 exports.sendMessage = async (req, res) => {
   const { bookingId, senderId, message, price } = req.body;
+  console.log(`[ChatController - sendMessage] Request received. Sender: ${senderId}, Booking: ${bookingId}, Message: "${message}"`);
 
   if (!bookingId || !senderId || !message) {
+    console.error(`[ChatController - sendMessage] Missing required fields.`);
     return res.status(400).json({ success: false, error: "Missing required fields." });
   }
 
@@ -144,13 +149,16 @@ exports.sendMessage = async (req, res) => {
     const hasPricing = /\b(rs|rupees|price|cost|quote|thousand|hundred|\d{3,})\b/i.test(message);
     if (hasPricing) {
       try {
+        console.log(`[ChatController - sendMessage] Pricing keywords detected. Calling NLP extractor...`);
         const p = await nlpParser.extractPrice(message);
         if (p !== null) {
           extractedPrice = p;
-          console.log(`[ChatController] Gemini extracted price: ${extractedPrice} from message: "${message}"`);
+          console.log(`[ChatController - sendMessage] Gemini extracted dynamic price: ${extractedPrice} from message: "${message}"`);
+        } else {
+          console.log(`[ChatController - sendMessage] NLP extractor did not find a valid price.`);
         }
       } catch (err) {
-        console.error("Error extracting price:", err);
+        console.error("[ChatController - sendMessage] Error extracting price:", err.message);
       }
     }
   }
@@ -176,6 +184,7 @@ exports.sendMessage = async (req, res) => {
     // Ensure sender exists in public.profiles table to prevent foreign key violation!
     const { data: existingUser } = await supabase.from("profiles").select("id").eq("id", normSenderId).single();
     if (!existingUser) {
+      console.log(`[ChatController - sendMessage] Creating missing user profile for sender: ${normSenderId}`);
       await supabase.from("profiles").insert([{
         id: normSenderId,
         phone_number: "phone-" + normSenderId.substr(0, 8),
@@ -187,24 +196,29 @@ exports.sendMessage = async (req, res) => {
     // 1. Verify that the booking exists
     const { data: booking, error: bookingError } = await supabase
       .from("bookings")
-      .select("id, buyer_id, seller_id")
+      .select("id, buyer_id, seller_id, price")
       .eq("id", normId)
       .single();
 
     if (bookingError || !booking) {
-      console.warn("Booking session not found in DB, but message stored in memory.");
+      console.warn(`[ChatController - sendMessage] Booking session not found in DB. Msg stored in memory. Booking: ${normId}`);
       return res.status(201).json({ success: true, message: newMsgObj, fallback: true });
     }
 
     // Update booking price dynamically if a new price was discussed
-    if (extractedPrice) {
+    if (extractedPrice && extractedPrice != booking.price) {
+      console.log(`[ChatController - sendMessage] Updating booking price from ${booking.price} to ${extractedPrice}. Resetting agreements.`);
       const { error: priceUpdateError } = await supabase
         .from("bookings")
-        .update({ price: extractedPrice })
+        .update({ 
+          price: extractedPrice,
+          buyer_agreed: false,
+          seller_agreed: false
+        })
         .eq("id", normId);
         
       if (priceUpdateError) {
-        console.warn("Could not update booking price:", priceUpdateError);
+        console.warn(`[ChatController - sendMessage] Could not update booking price:`, priceUpdateError.message);
       }
     }
 
@@ -223,7 +237,7 @@ exports.sendMessage = async (req, res) => {
 
     if (error) {
       if (error.code === "PGRST205") {
-        console.warn("Chats table missing. Message sent mocked.");
+        console.warn(`[ChatController - sendMessage] Chats table missing. Message sent mocked.`);
         return res.status(201).json({
           success: true,
           message: newMsgObj,
@@ -233,9 +247,10 @@ exports.sendMessage = async (req, res) => {
       throw error;
     }
 
+    console.log(`[ChatController - sendMessage] Message successfully sent and stored in DB. Msg ID: ${newMessage[0].id}`);
     return res.status(201).json({ success: true, message: newMessage[0] });
   } catch (err) {
-    console.error("Error sending chat message:", err);
+    console.error("[ChatController - sendMessage] Error sending chat message:", err.message, err.stack);
     // Return success anyway since it's safely in memory store
     return res.status(201).json({ success: true, message: newMsgObj, fallback: true });
   }
@@ -244,8 +259,10 @@ exports.sendMessage = async (req, res) => {
 // 3. Mark agreement to book
 exports.agreeToBook = async (req, res) => {
   const { bookingId, userId, role, price } = req.body;
+  console.log(`[ChatController - agreeToBook] Request received. Booking: ${bookingId}, User: ${userId}, Role: ${role}, Price: ${price}`);
 
   if (!bookingId || !userId || !role) {
+    console.error(`[ChatController - agreeToBook] Missing required fields.`);
     return res.status(400).json({ success: false, error: "Missing required fields." });
   }
 
@@ -260,21 +277,26 @@ exports.agreeToBook = async (req, res) => {
       .single();
 
     if (fetchError || !booking) {
+      console.warn(`[ChatController - agreeToBook] Booking negotiation not found for ID: ${normId}`);
       return res.status(404).json({ success: false, error: "Booking negotiation not found." });
     }
 
     const updates = {};
     if (role === "buyer") {
       updates.buyer_agreed = true;
+      console.log(`[ChatController - agreeToBook] Buyer agreed.`);
     } else if (role === "seller") {
       updates.seller_agreed = true;
+      console.log(`[ChatController - agreeToBook] Seller agreed.`);
     } else {
+      console.error(`[ChatController - agreeToBook] Invalid role: ${role}`);
       return res.status(400).json({ success: false, error: "Invalid role specified." });
     }
 
     // Update the price if dynamic price is agreed upon
     if (price) {
       updates.price = price;
+      console.log(`[ChatController - agreeToBook] Setting negotiated price to: ${price}`);
     }
 
     const { data: updatedBooking, error: updateError } = await supabase
@@ -286,7 +308,7 @@ exports.agreeToBook = async (req, res) => {
     if (updateError) {
       // Fallback if columns don't exist yet in the database
       if (updateError.message.includes("column") && updateError.message.includes("does not exist")) {
-        console.warn("Agreement columns missing in bookings table. Mocking success.");
+        console.warn(`[ChatController - agreeToBook] Agreement columns missing in bookings table. Mocking success.`);
         
         // Mock the state returned
         const mockBooking = {
@@ -310,7 +332,9 @@ exports.agreeToBook = async (req, res) => {
 
     // IF AGREEMENT IS SUCCESSFUL, SYNC TO GOOGLE SHEETS WILL HAPPEN ON CONFIRMATION
     if (bothAgreed) {
-      console.log(`[Chat Controller] Price negotiation finalized. Ready for booking checkout.`);
+      console.log(`[ChatController - agreeToBook] BOTH PARTIES AGREED! Price negotiation finalized for booking ${normId}. Ready for checkout.`);
+    } else {
+      console.log(`[ChatController - agreeToBook] Awaiting other party. Current status -> buyer_agreed: ${finalBooking.buyer_agreed}, seller_agreed: ${finalBooking.seller_agreed}`);
     }
 
     return res.status(200).json({
@@ -319,7 +343,7 @@ exports.agreeToBook = async (req, res) => {
       bothAgreed: bothAgreed
     });
   } catch (err) {
-    console.error("Error updating booking agreement:", err);
+    console.error("[ChatController - agreeToBook] Error updating booking agreement:", err.message, err.stack);
     return res.status(500).json({ success: false, error: err.message });
   }
 };

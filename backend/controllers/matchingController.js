@@ -69,7 +69,7 @@ function geocodeAddress(address) {
 exports.matchProviders = async (req, res) => {
   let matchDebugInfo = null;
   try {
-    const { service, time, resolvedTimestamp, location, latitude, longitude } = req.body;
+    const { service, time, resolvedTimestamp, location, latitude, longitude, budget_sensitivity, time_sensitivity } = req.body;
 
     console.log("[Matching Engine] Received request to match providers for:", {
       service,
@@ -77,7 +77,9 @@ exports.matchProviders = async (req, res) => {
       resolvedTimestamp,
       location,
       latitude,
-      longitude
+      longitude,
+      budget_sensitivity,
+      time_sensitivity
     });
 
     let searchLat = parseFloat(latitude);
@@ -393,6 +395,18 @@ exports.matchProviders = async (req, res) => {
           );
         }
 
+        // Determine Classification based on sensitivities
+        let classification = "Standard";
+        if (time_sensitivity === "High" && distance !== null && distance < 2.0) {
+          classification = "Fastest Arrival";
+        } else if (budget_sensitivity === "Low" && (provider.base_rating < 4.8 || distance > 3.0)) {
+          classification = "Budget-Friendly";
+        } else if (budget_sensitivity === "High" && provider.base_rating >= 4.8) {
+          classification = "Premium Expert";
+        } else if (time_sensitivity === "Flexible") {
+          classification = "Flexible Schedule";
+        }
+
         return {
           id: provider.id,
           business_name: provider.business_name || "Professional Karigar",
@@ -404,7 +418,8 @@ exports.matchProviders = async (req, res) => {
           location: provider.shop_address || "Karachi",
           distance: distance,
           available: provider.available !== undefined ? provider.available : true,
-          available_slots: provider.available_slots || []
+          available_slots: provider.available_slots || [],
+          classification: classification
         };
       });
 
@@ -473,6 +488,15 @@ exports.matchProviders = async (req, res) => {
         const pLng = baseLng + offsets[index].lng;
         const dist = calculateDistance(baseLat, baseLng, pLat, pLng) || 0.5 + index * 0.3;
 
+        let classification = "Standard";
+        if (time_sensitivity === "High" && dist < 2.0) {
+          classification = "Fastest Arrival";
+        } else if (budget_sensitivity === "Low" && ratings[index] < 4.8) {
+          classification = "Budget-Friendly";
+        } else if (budget_sensitivity === "High" && ratings[index] >= 4.8) {
+          classification = "Premium Expert";
+        }
+
         return {
           id: `mock-${index + 1}`,
           business_name: `${name} (${service})`,
@@ -483,7 +507,8 @@ exports.matchProviders = async (req, res) => {
           lng: pLng,
           location: location || "Gulshan",
           distance: dist,
-          available: true
+          available: true,
+          classification: classification
         };
       });
 

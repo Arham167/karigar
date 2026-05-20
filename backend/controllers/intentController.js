@@ -17,19 +17,18 @@ exports.parseIntent = async (req, res, next) => {
     }
 
     const parsedData = await nlpParser.parseRequest(text);
+    
+    // Log the entire parsed data for Vercel backend logs as requested
+    console.log("[Intent Parsed Data]:", JSON.stringify(parsedData, null, 2));
 
-    // Give back exactly three JSON objects as requested: service, time, location
-    // Format:
-    // {
-    //   "service": { "value": "Plumber", "confidence": 0.95 } or null,
-    //   "time": { "value": "5 PM", "confidence": 0.98 } or null,
-    //   "location": { "value": "Gulshan", "confidence": 0.97 } or null
-    // }
+    // Give back exactly JSON objects as requested: service, time, location, and optionally budget_sensitivity and time_sensitivity
     return res.status(200).json({
       success: true,
       service: parsedData.service,
       time: parsedData.time,
-      location: parsedData.location
+      location: parsedData.location,
+      budget_sensitivity: parsedData.budget_sensitivity || null,
+      time_sensitivity: parsedData.time_sensitivity || null
     });
   } catch (error) {
     console.error("Error in parseIntent:", error);
