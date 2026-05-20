@@ -10,7 +10,7 @@ import {
   RefreshControl,
   Image,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { 
   ArrowLeft, 
   MapPin, 
@@ -21,6 +21,7 @@ import {
 import { supabase } from "../utils/supabase";
 
 function MyJobsScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState("current"); // "past", "current", "future"
@@ -249,7 +250,7 @@ function MyJobsScreen({ navigation }) {
   };
 
   return (
-    <SafeAreaView style={styles.container}><StatusBar barStyle="light-content" backgroundColor="#032F23" /><View style={styles.header}><TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}><ArrowLeft size={24} color="white" /></TouchableOpacity><Text style={styles.headerTitle}>My Jobs Manager</Text><View style={{ width: 40 }} /></View><View style={styles.tabContainer}><TouchableOpacity style={[styles.tabBtn, activeTab === "past" && styles.activeTabBtn]} onPress={() => setActiveTab("past")}><Text style={[styles.tabText, activeTab === "past" && styles.activeTabText]}>Past Jobs</Text></TouchableOpacity><TouchableOpacity style={[styles.tabBtn, activeTab === "current" && styles.activeTabBtn]} onPress={() => setActiveTab("current")}><Text style={[styles.tabText, activeTab === "current" && styles.activeTabText]}>Current</Text>{(jobs.current && jobs.current.length > 0) ? (<View style={styles.badge}><Text style={styles.badgeText}>{String(jobs.current.length)}</Text></View>) : null}</TouchableOpacity><TouchableOpacity style={[styles.tabBtn, activeTab === "future" && styles.activeTabBtn]} onPress={() => setActiveTab("future")}><Text style={[styles.tabText, activeTab === "future" && styles.activeTabText]}>Future Jobs</Text></TouchableOpacity></View><ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={["#065F46"]} />}>{renderTabContent()}</ScrollView></SafeAreaView>
+    <View style={styles.container}><StatusBar barStyle="light-content" translucent={true} backgroundColor="transparent" /><View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}><TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}><ArrowLeft size={24} color="white" /></TouchableOpacity><Text style={styles.headerTitle}>My Jobs Manager</Text><View style={{ width: 40 }} /></View><View style={styles.tabContainer}><TouchableOpacity style={[styles.tabBtn, activeTab === "past" && styles.activeTabBtn]} onPress={() => setActiveTab("past")}><Text style={[styles.tabText, activeTab === "past" && styles.activeTabText]}>Past Jobs</Text></TouchableOpacity><TouchableOpacity style={[styles.tabBtn, activeTab === "current" && styles.activeTabBtn]} onPress={() => setActiveTab("current")}><Text style={[styles.tabText, activeTab === "current" && styles.activeTabText]}>Current</Text>{(jobs.current && jobs.current.length > 0) ? (<View style={styles.badge}><Text style={styles.badgeText}>{String(jobs.current.length)}</Text></View>) : null}</TouchableOpacity><TouchableOpacity style={[styles.tabBtn, activeTab === "future" && styles.activeTabBtn]} onPress={() => setActiveTab("future")}><Text style={[styles.tabText, activeTab === "future" && styles.activeTabText]}>Future Jobs</Text></TouchableOpacity></View><ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={["#065F46"]} />}>{renderTabContent()}</ScrollView></View>
   );
 }
 

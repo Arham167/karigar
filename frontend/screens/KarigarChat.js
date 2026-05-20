@@ -15,7 +15,7 @@ import {
   Modal,
   Image,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ArrowLeft,
@@ -67,6 +67,7 @@ function normalizeBookingIdForRealtime(id) {
 }
 
 export default function KarigarChat({ route, navigation }) {
+  const insets = useSafeAreaInsets();
   const { bookingId, provider, role, dynamicQuote, buyerName } = route.params || {
     bookingId: "mock-booking-id",
     provider: { business_name: "Bilal Plumber", specialization: "Plumber" },
@@ -892,11 +893,11 @@ export default function KarigarChat({ route, navigation }) {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" translucent={false} backgroundColor="#042F23" />
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" translucent={true} backgroundColor="transparent" />
 
       {/* ── 1. Secure Header ── */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: Math.max(insets.top, 14) }]}>
         <View style={styles.headerRow}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
             <ArrowLeft size={24} color="white" />
@@ -1160,7 +1161,7 @@ export default function KarigarChat({ route, navigation }) {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 

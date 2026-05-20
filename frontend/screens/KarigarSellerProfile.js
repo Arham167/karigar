@@ -232,7 +232,7 @@ export default function KarigarSellerProfile({ provider, userRequestedTime, user
           />
 
           {/* Floating Actions on Hero Banner */}
-          <SafeAreaView style={styles.heroHeader}>
+          <View style={[styles.heroHeader, { top: Math.max(insets.top, 10) + 10 }]}>
             <TouchableOpacity 
               style={styles.circleHeaderButton} 
               activeOpacity={0.8}
@@ -250,7 +250,7 @@ export default function KarigarSellerProfile({ provider, userRequestedTime, user
             >
               <Heart size={22} color={liked ? "#EF4444" : "white"} fill={liked ? "#EF4444" : "transparent"} />
             </TouchableOpacity>
-          </SafeAreaView>
+          </View>
 
           {/* Floating Bottom Card over Hero */}
           <View style={styles.heroOverlayContent}>

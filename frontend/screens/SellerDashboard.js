@@ -296,8 +296,8 @@ export default function SellerDashboard({ navigation }) {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" translucent={false} backgroundColor="#032F23" />
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" translucent={true} backgroundColor="transparent" />
 
       {/* Gorgeous In-App Notification Toast */}
       {inAppNotification && (
@@ -328,7 +328,7 @@ export default function SellerDashboard({ navigation }) {
       )}
       
       {/* ── 1. Top Emerald Header ── */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}>
         <View style={styles.headerRow}>
           <Image 
             source={{ uri: providerProfile?.profile_image_url || "https://images.unsplash.com/photo-1540569014015-19a7be504e3a?q=80&w=200" }} 
@@ -521,7 +521,7 @@ export default function SellerDashboard({ navigation }) {
 
         <View style={{ height: 40 }} />
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 

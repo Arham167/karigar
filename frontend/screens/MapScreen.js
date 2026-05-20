@@ -1420,7 +1420,7 @@ export default function MapScreen({ navigation }) {
         transparent={false}
         onRequestClose={() => setShowProfileModal(false)}
       >
-        <SafeAreaView style={{ flex: 1, backgroundColor: "#F7F9F8" }}>
+        <View style={{ flex: 1, backgroundColor: "#F7F9F8" }}>
           <KarigarSellerProfile
             provider={selectedProvider}
             userRequestedTime={matchedTime}
@@ -1440,7 +1440,7 @@ export default function MapScreen({ navigation }) {
               }, 300);
             }}
           />
-        </SafeAreaView>
+        </View>
       </Modal>
 
       {/* Custom Premium Alert Popups */}
