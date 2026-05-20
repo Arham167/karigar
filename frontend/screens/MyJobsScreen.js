@@ -144,10 +144,26 @@ export default function MyJobsScreen({ navigation }) {
 
   const formatJobTime = (isoString) => {
     if (!isoString) return "Time not set";
-    const date = new Date(isoString);
-    return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) + 
-           " at " + 
-           date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    try {
+      const date = new Date(isoString);
+      if (isNaN(date.getTime())) return "Time not set";
+      
+      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      
+      const dayName = days[date.getDay()];
+      const monthName = months[date.getMonth()];
+      const day = date.getDate();
+      
+      let h = date.getHours();
+      const m = date.getMinutes().toString().padStart(2, "0");
+      const ampm = h >= 12 ? "PM" : "AM";
+      h = h % 12 || 12;
+      
+      return `${dayName}, ${monthName} ${day} at ${h}:${m} ${ampm}`;
+    } catch (e) {
+      return "Time not set";
+    }
   };
 
   const renderJobCard = (job, type) => {
