@@ -16,6 +16,7 @@ import {
   Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ArrowLeft,
   Send,
@@ -92,6 +93,9 @@ export default function KarigarChat({ route, navigation }) {
     // Preserve globally across all screens and unmounts!
     global.appChatHistory[chatKey] = validMsgs;
     messagesRef.current = validMsgs;
+
+    // Save to AsyncStorage for complete persistence across app restarts
+    AsyncStorage.setItem(`chat_history_${chatKey}`, JSON.stringify(validMsgs)).catch(e => console.log("AsyncStorage error:", e));
 
     // Dynamically compute 'from' for the current active view!
     const renderableMsgs = validMsgs.map(m => {
@@ -375,7 +379,20 @@ export default function KarigarChat({ route, navigation }) {
     const activeUserId = customUserId || currentUserIdRef.current || (role === "buyer" ? MOCK_BUYER_UUID : MOCK_SELLER_UUID);
 
     // Immediately load our global preserved chat history!
-    const existingHistory = global.appChatHistory[chatKey] || [];
+    let existingHistory = global.appChatHistory[chatKey] || [];
+    if (existingHistory.length === 0) {
+      try {
+        const stored = await AsyncStorage.getItem(`chat_history_${chatKey}`);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed && parsed.length > 0) {
+            existingHistory = parsed;
+            global.appChatHistory[chatKey] = parsed;
+          }
+        }
+      } catch (e) { console.log("AsyncStorage read error:", e); }
+    }
+
     if (existingHistory.length > 0) {
       updateMessages(existingHistory);
     }
