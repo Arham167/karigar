@@ -16,8 +16,6 @@ import {
   MapPin, 
   Clock, 
   CheckCircle2, 
-  Calendar,
-  AlertCircle,
   Briefcase
 } from "lucide-react-native";
 import { supabase } from "../utils/supabase";
@@ -156,11 +154,12 @@ export default function MyJobsScreen({ navigation }) {
       const day = date.getDate();
       
       let h = date.getHours();
-      const m = date.getMinutes().toString().padStart(2, "0");
+      const m = date.getMinutes();
+      const mStr = m < 10 ? "0" + m : "" + m;
       const ampm = h >= 12 ? "PM" : "AM";
       h = h % 12 || 12;
       
-      return `${dayName}, ${monthName} ${day} at ${h}:${m} ${ampm}`;
+      return `${dayName}, ${monthName} ${day} at ${h}:${mStr} ${ampm}`;
     } catch (e) {
       return "Time not set";
     }
@@ -175,12 +174,12 @@ export default function MyJobsScreen({ navigation }) {
     if (type === "current") {
       statusColor = "#D97706";
       statusBg = "#FFFBEB";
-      StatusIcon = AlertCircle;
+      StatusIcon = Clock; // 100% guaranteed to exist
       statusText = "Active Now";
     } else if (type === "future") {
       statusColor = "#2563EB";
       statusBg = "#EFF6FF";
-      StatusIcon = Calendar;
+      StatusIcon = Clock; // 100% guaranteed to exist
       statusText = "Upcoming";
     }
 
