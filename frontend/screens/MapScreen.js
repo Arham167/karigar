@@ -437,7 +437,8 @@ export default function MapScreen({ navigation }) {
         
         // Fetch provider profiles to get names
         const bookingsWithProviders = [...(data || [])];
-        const sellerIds = bookingsWithProviders.filter(b => b.seller_id).map(b => b.seller_id);
+        const validBookings = bookingsWithProviders.filter(b => b.seller_id !== null);
+        const sellerIds = validBookings.map(b => b.seller_id);
         
         if (sellerIds.length > 0) {
           const { data: providersList } = await supabase
@@ -452,15 +453,15 @@ export default function MapScreen({ navigation }) {
             });
           }
           
-          bookingsWithProviders.forEach(b => {
+          validBookings.forEach(b => {
             if (b.seller_id && providerMap[b.seller_id]) {
               b.provider = providerMap[b.seller_id];
             }
           });
         }
         
-        setBookings(bookingsWithProviders);
-        syncBookingsAndManageReminders(bookingsWithProviders);
+        setBookings(validBookings);
+        syncBookingsAndManageReminders(validBookings);
       }
     } catch (err) {
       console.log("Error loading bookings:", err);

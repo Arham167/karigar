@@ -262,44 +262,7 @@ export default function SellerDashboard({ navigation }) {
       });
     }
 
-    setActiveNegotiations([
-      {
-        id: "mock-booking-1",
-        buyerId: "mock-buyer-1",
-        buyerName: "Arham Noman",
-        buyerAvatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=200",
-        service: "Ceiling Fan & Board Wiring",
-        location: "Gulshan-e-Iqbal, Karachi",
-        price: 800,
-        status: "pending",
-        buyerAgreed: true,
-        sellerAgreed: false
-      },
-      {
-        id: "mock-booking-2",
-        buyerId: "mock-buyer-2",
-        buyerName: "Ayesha Khan",
-        buyerAvatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200",
-        service: "AC Inverter Diagnostics",
-        location: "DHA Phase 6, Karachi",
-        price: 2500,
-        status: "pending",
-        buyerAgreed: false,
-        sellerAgreed: false
-      },
-      {
-        id: "mock-booking-3",
-        buyerId: "mock-buyer-3",
-        buyerName: "Zain Ali",
-        buyerAvatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=200",
-        service: "Water Pipe Leak Repair",
-        location: "Clifton Block 5, Karachi",
-        price: 1200,
-        status: "confirmed",
-        buyerAgreed: true,
-        sellerAgreed: true
-      }
-    ]);
+    setActiveNegotiations([]);
   };
 
   // Open Chat Screen
@@ -484,7 +447,11 @@ export default function SellerDashboard({ navigation }) {
             let statusColor = "#D97706";
             let statusBg = "#FFFBEB";
 
-            if (item.status === "confirmed" || item.status === "accepted") {
+            if (item.status === "completed") {
+              statusLabel = "Completed";
+              statusColor = "#4B5563";
+              statusBg = "#F3F4F6";
+            } else if (item.status === "confirmed" || item.status === "accepted") {
               statusLabel = "Confirmed Booked";
               statusColor = "#059669";
               statusBg = "#ECFDF5";
