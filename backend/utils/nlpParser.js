@@ -468,3 +468,49 @@ exports.parseRequest = async (text) => {
   console.log("[NLP Engine] Gemini failed or not configured. Returning incomplete Heuristics:", JSON.stringify(finalResult));
   return finalResult;
 };
+
+// 5. Price Extraction via Gemini
+exports.extractPrice = async (text) => {
+  if (!text || typeof text !== "string") return null;
+  
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (!geminiKey || geminiKey === "your_gemini_key") {
+    console.warn("[NLP Price Extractor] Gemini API key missing. Cannot extract price.");
+    return null;
+  }
+
+  try {
+    const { GoogleGenerativeAI } = require("@google/generative-ai");
+    const genAI = new GoogleGenerativeAI(geminiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+    const systemPrompt = `
+You are an expert price extractor. Analyze the user's chat message and extract any agreed or proposed price in Pakistani Rupees (PKR/Rs).
+If the user is proposing, agreeing, or mentioning a specific amount for the service, return that number.
+If there are multiple numbers, return the final agreed or proposed price.
+Return ONLY a valid JSON object with the format: {"price": <number>}
+If no clear price is discussed, return {"price": null}
+Example 1: "1500 kar lein" -> {"price": 1500}
+Example 2: "nahi 2000 honge" -> {"price": 2000}
+Example 3: "ok done" -> {"price": null}
+Do not return any markdown or text outside of the JSON block.
+`;
+
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: `${systemPrompt}\n\nMessage: "${text}"` }] }],
+      generationConfig: {
+        responseMimeType: "application/json"
+      }
+    });
+
+    const contentText = result.response.text().trim();
+    const jsonMatch = contentText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      return parsed.price || null;
+    }
+  } catch (error) {
+    console.error("[NLP Price Extractor] Error extracting price:", error.message);
+  }
+  return null;
+};

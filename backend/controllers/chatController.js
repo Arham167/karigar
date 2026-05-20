@@ -1,5 +1,6 @@
 const supabase = require("../utils/supabase");
 const googleSheets = require("../utils/googleSheets");
+const nlpParser = require("../utils/nlpParser");
 
 // Robust in-memory store for mock bookings and Supabase fallbacks
 global.chatMemoryStore = global.chatMemoryStore || {};
@@ -136,6 +137,25 @@ exports.sendMessage = async (req, res) => {
   const normSenderId = normalizeUserId(senderId, req.body.role || "buyer");
   await ensureMockRecordsExist();
 
+  // ----- DYNAMIC PRICING EXTRACTION -----
+  let extractedPrice = price || null;
+  
+  if (!extractedPrice) {
+    const hasPricing = /\b(rs|rupees|price|cost|quote|thousand|hundred|\d{3,})\b/i.test(message);
+    if (hasPricing) {
+      try {
+        const p = await nlpParser.extractPrice(message);
+        if (p !== null) {
+          extractedPrice = p;
+          console.log(`[ChatController] Gemini extracted price: ${extractedPrice} from message: "${message}"`);
+        }
+      } catch (err) {
+        console.error("Error extracting price:", err);
+      }
+    }
+  }
+  // ----------------------------------------
+
   // Always store in memory store as a robust backup/mock handler
   if (!global.chatMemoryStore[normId]) {
     global.chatMemoryStore[normId] = [];
@@ -146,7 +166,7 @@ exports.sendMessage = async (req, res) => {
     booking_id: normId,
     sender_id: normSenderId,
     message: message,
-    extracted_price: price || null,
+    extracted_price: extractedPrice,
     timestamp: new Date().toISOString()
   };
 
@@ -176,6 +196,18 @@ exports.sendMessage = async (req, res) => {
       return res.status(201).json({ success: true, message: newMsgObj, fallback: true });
     }
 
+    // Update booking price dynamically if a new price was discussed
+    if (extractedPrice) {
+      const { error: priceUpdateError } = await supabase
+        .from("bookings")
+        .update({ price: extractedPrice })
+        .eq("id", normId);
+        
+      if (priceUpdateError) {
+        console.warn("Could not update booking price:", priceUpdateError);
+      }
+    }
+
     // 2. Insert chat message into Supabase
     const { data: newMessage, error } = await supabase
       .from("chats")
@@ -184,7 +216,7 @@ exports.sendMessage = async (req, res) => {
           booking_id: normId,
           sender_id: normSenderId,
           message: message,
-          extracted_price: price || null
+          extracted_price: extractedPrice
         }
       ])
       .select();
